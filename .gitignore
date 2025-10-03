@@ -1,0 +1,7 @@
+# Ignore model artifacts and cache files
+models/*.joblib
+models/*.pkl
+reports/*.joblib
+__pycache__/
+.ipynb_checkpoints/
+.DS_Store
