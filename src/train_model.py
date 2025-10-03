@@ -17,7 +17,7 @@ import argparse
 import json
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Tuple
+from typing import Any, Dict, List, Tuple
 
 import joblib
 import pandas as pd
@@ -289,11 +289,12 @@ def evaluate_model(model: ImbPipeline, X: pd.DataFrame, y: pd.Series) -> Dict[st
     predictions = model.predict(X)
     probabilities = model.predict_proba(X)[:, 1]
 
+    # Cast numpy scalar returns to builtin float to satisfy typing (Dict[str, float])
     return {
-        "accuracy": accuracy_score(y, predictions),
-        "precision": precision_score(y, predictions, zero_division=0),
-        "recall": recall_score(y, predictions, zero_division=0),
-        "roc_auc": roc_auc_score(y, probabilities),
+        "accuracy": float(accuracy_score(y, predictions)),
+        "precision": float(precision_score(y, predictions, zero_division=0)),
+        "recall": float(recall_score(y, predictions, zero_division=0)),
+        "roc_auc": float(roc_auc_score(y, probabilities)),
     }
 
 

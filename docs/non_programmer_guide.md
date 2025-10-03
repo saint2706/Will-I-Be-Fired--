@@ -7,6 +7,7 @@ want to understand the full pipeline and the meaning of every metric, continue t
 ---
 
 ## 1. Project overview in plain language
+
 - **Goal:** Use past HR records to estimate the chance that an employee will be terminated in the future.
 - **Dataset:** A table called `HRDataset_v14.csv` where each row is an employee and each column describes something about them
   (department, salary, survey scores, etc.). One special column, `Termd`, marks whether the employee eventually left.
@@ -16,6 +17,7 @@ want to understand the full pipeline and the meaning of every metric, continue t
 ---
 
 ## 2. How the data becomes predictions
+
 The workflow follows six repeatable stages. You can re-run them with the scripts in the `src/` folder.
 
 1. **Load the data** – Read the CSV file into memory using pandas (a spreadsheet-like Python library). Every column is kept in
@@ -47,6 +49,7 @@ recreates every experiment and produces a metrics report in `reports/metrics.jso
 ---
 
 ## 3. What happens during feature engineering
+
 Below is a checklist of the transformations performed on every incoming record, whether it is used for training or for
 prediction.
 
@@ -69,6 +72,7 @@ prediction.
 ---
 
 ## 4. Metrics explained without jargon
+
 Every metric is calculated twice: once on the validation set and once on the test set. High scores across both are a good sign.
 
 - **Accuracy** – The share of all predictions the model gets right. Formula: `(true positives + true negatives) / all cases`.
@@ -87,71 +91,94 @@ Every metric is calculated twice: once on the validation set and once on the tes
 ---
 
 ## 5. Step-by-step: running the project without writing code
+
 Follow these steps on macOS, Windows (with PowerShell), or Linux. Replace `<path>` with the actual folder where you stored the
 repository.
 
 1. **Install Python 3.10 or newer.**
 2. **Open a terminal** (Command Prompt, PowerShell, or Terminal app).
 3. **Move into the project folder:**
+
    ```bash
    cd <path>/Will-I-Be-Fired--
    ```
+
 4. **Install the dependencies:**
+
    ```bash
    pip install -r requirements.txt
    ```
+
 5. **Train or retrain the model (optional):**
+
    ```bash
    python src/train_model.py
    ```
+
    This command prints progress logs, saves the best model to `models/best_model.joblib`, and writes detailed metrics to
    `reports/metrics.json`.
 6. **Choose how you want to make predictions:**
    - **Interactive command line:**
+
      ```bash
      python src/predict_cli.py --model models/best_model.joblib
      ```
+
      The program will ask you questions one-by-one. You can also pass a JSON file containing employee records:
+
      ```bash
      python src/predict_cli.py --employee-json my_team.json --model models/best_model.joblib --horizons 1 2 5
      ```
+
    - **Streamlit graphical interface:**
+
      ```bash
      streamlit run src/gui_app.py
      ```
+
      A browser tab opens where you can select values from dropdown menus, upload CSV/JSON files with many employees, and download
      a neatly formatted report of the predictions.
 
 ---
 
 ## 6. Understanding the outputs
+
 ### 6.1 Console and log messages
+
 Every script writes structured logs like:
-```
+
+```log
 2024-04-01 10:15:12 INFO  feature_engineering: Loaded 311 rows from HRDataset_v14.csv
 ```
+
 - **INFO** messages describe progress.
 - **WARNING/ERROR** messages highlight problems and always include suggestions to fix them.
 All logs are timestamped so you can follow what happened in which order.
 
 ### 6.2 Metrics report (`reports/metrics.json`)
+
 This file is a JSON object with:
+
 - `validation` and `test` sections, each containing accuracy, precision, recall, and ROC-AUC.
 - The name of the chosen model.
 - The hyperparameters used during training.
 Open it in any text editor or online JSON viewer to explore the numbers.
 
 ### 6.3 Prediction outputs
+
 - **CLI output:** For each employee and each requested tenure horizon, you receive a line like:
-  ```
+
+  ```text
   Employee 1 — Tenure 2 years → termination probability 12.4% (confidence 76.0%)
   ```
+
 - **Streamlit dashboard:** Displays a table with the probabilities and confidence levels, plus a chart showing how risk changes
   over time. The chart also reminds you of the model's overall accuracy, precision, recall, and ROC-AUC.
 - **Downloaded report:** When you process multiple employees, the GUI offers a CSV download. Each row contains the original
   employee identifier (if provided), the tenure horizon, the probability, and the confidence.
 
 To interpret these numbers:
+
 - Probabilities close to **0%** indicate low risk; close to **100%** means high risk.
 - Confidence above **75%** means the model was far away from uncertainty; numbers near **50%** should be treated with caution.
 - Always combine the predictions with context from HR business partners and employee conversations.
@@ -159,6 +186,7 @@ To interpret these numbers:
 ---
 
 ## 7. Ethics, responsible use, and monitoring
+
 - **Bias checks:** Periodically review performance separately for different demographic groups.
 - **Explainability:** Use the feature importances from the random forest or shapley value tools to explain why a prediction was
   high or low.
@@ -169,6 +197,7 @@ To interpret these numbers:
 ---
 
 ## 8. Troubleshooting checklist
+
 - **Missing packages?** Re-run `pip install -r requirements.txt`.
 - **Model file not found?** Train the model first (`python src/train_model.py`) or provide the correct path to `--model`.
 - **File upload fails in Streamlit?** Ensure the CSV has column names that match the dataset. For JSON, wrap multiple employees
@@ -179,6 +208,7 @@ To interpret these numbers:
 ---
 
 ## 9. Glossary
+
 - **Feature:** A column in the dataset describing an employee.
 - **Label/Target:** The value you want to predict (here: `Termd`).
 - **Pipeline:** A bundle of preprocessing steps and a model executed in sequence.
