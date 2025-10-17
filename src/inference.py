@@ -224,7 +224,11 @@ def _reference_date_for_horizon(record_frame: pd.DataFrame, horizon_years: float
     if "DateofHire" in record_frame:
         hire_date = record_frame["DateofHire"].iloc[0]
         if pd.notna(hire_date):
-            return hire_date + pd.DateOffset(years=horizon_years)
+            # Convert the fractional-year horizon into a timedelta so pandas can
+            # handle non-integer values (e.g., 1.5 years).
+            horizon_in_days = horizon_years * 365.25
+            horizon_delta = pd.to_timedelta(horizon_in_days, unit="D")
+            return hire_date + horizon_delta
     logger.warning("Could not calculate horizon reference date due to missing 'DateofHire'")
     return None
 
