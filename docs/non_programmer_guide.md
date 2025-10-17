@@ -27,9 +27,9 @@ a structured format so later steps can understand whether a value is text, a num
    fill in missing values, and convert words into numbers so algorithms can work with them. The code that does this lives in
    [`src/feature_engineering.py`](../src/feature_engineering.py).
 3. **Split the dataset** – Divide the rows into three non-overlapping pieces:
-   - **Training set (60%)** – What the algorithms learn from.
-   - **Validation set (20%)** – Used during tuning to choose the best algorithm without touching the final test.
-   - **Test set (20%)** – Held back until the end so we know how the chosen model behaves on truly unseen people.
+   - **Training set (70%)** – What the algorithms learn from.
+   - **Validation set (15%)** – Used during tuning to choose the best algorithm without touching the final test.
+   - **Test set (15%)** – Held back until the end so we know how the chosen model behaves on truly unseen people.
    The splitting keeps the same proportion of terminated vs. active employees in each subset (this is called *stratification*).
 4. **Train multiple models** – Three popular machine-learning approaches are tried:
    - **Logistic regression** – A simple formula that estimates the log-odds of termination as a weighted sum of the input
