@@ -40,6 +40,7 @@ try:
         DEFAULT_MODEL_PATH,
         DEFAULT_TENURE_HORIZONS,
         TenureRisk,
+        load_model,
         predict_tenure_risk,
     )
     from .logging_utils import configure_logging, get_logger
@@ -49,6 +50,7 @@ except ImportError:  # pragma: no cover - fallback for script execution
         DEFAULT_MODEL_PATH,
         DEFAULT_TENURE_HORIZONS,
         TenureRisk,
+        load_model,
         predict_tenure_risk,
     )
     from logging_utils import configure_logging, get_logger
@@ -146,6 +148,13 @@ def load_metrics() -> Optional[Dict]:
         return None
     logger.info("Loading metrics from %s", METRICS_PATH)
     return json.loads(METRICS_PATH.read_text())
+
+
+@st.cache_resource(show_spinner="Loading prediction model...")
+def load_prediction_model(model_path: str):
+    """Return a cached instance of the prediction pipeline for the given path."""
+
+    return load_model(Path(model_path))
 
 
 # --- UI and Plotting Helpers ---
@@ -300,8 +309,9 @@ with single_tab:
     if submitted:
         try:
             logger.info("Running single-record prediction with horizons: %s", tenure_horizons)
+            estimator = load_prediction_model(model_path_input)
             risks_state = predict_tenure_risk(
-                record, horizons=tenure_horizons, model_path=Path(model_path_input)
+                record, horizons=tenure_horizons, model=estimator
             )
             st.success("Prediction complete!")
             # Display results in a table
@@ -344,51 +354,59 @@ with batch_tab:
             records_df = None
 
         if records_df is not None and not records_df.empty:
-            logger.info("Running batch predictions for %d employees", len(records_df))
-            batch_results: List[Dict[str, Any]] = []
-            progress_bar = st.progress(0)
-
-            # Process each row and collect predictions
-            for i, (_, row) in enumerate(records_df.iterrows()):
-                try:
-                    risks = predict_tenure_risk(
-                        row.to_dict(), horizons=tenure_horizons, model_path=Path(model_path_input)
-                    )
-                    for r in risks:
-                        batch_results.append({"record_index": i + 1, **r.__dict__})
-                except Exception as e:
-                    logger.warning("Prediction failed for row %d: %s", i + 1, e)
-                    st.warning(f"Skipping prediction for row {i + 1} due to an error: {e}")
-                progress_bar.progress((i + 1) / len(records_df))
-
-            if batch_results:
-                batch_df = pd.DataFrame(batch_results)
-                st.success(f"Generated predictions for {batch_df['record_index'].nunique()} employees.")
-
-                # Display results in a tidy format and as a pivot table
-                st.dataframe(
-                    batch_df.style.format(
-                        {"termination_probability": "{:.2%}", "confidence": "{:.2%}"}
-                    )
-                )
-                st.subheader("Risk Probability Pivot Table")
-                pivot_table = batch_df.pivot_table(
-                    index="record_index", columns="tenure_years", values="termination_probability"
-                )
-                st.dataframe(pivot_table.style.format("{:.2%}"))
-
-                # Provide a download button for the results
-                timestamp = pd.Timestamp.now().strftime("%Y%m%d_%H%M%S")
-                report_path = REPORTS_DIR / f"prediction_report_{timestamp}.csv"
-                REPORTS_DIR.mkdir(parents=True, exist_ok=True)
-                csv_bytes = batch_df.to_csv(index=False).encode("utf-8")
-                st.download_button(
-                    "📥 Download Full Report (CSV)",
-                    data=csv_bytes,
-                    file_name=report_path.name,
-                    mime="text/csv",
-                )
+            try:
+                estimator = load_prediction_model(model_path_input)
+            except Exception as e:
+                logger.exception("Failed to load model for batch predictions")
+                st.error(f"Could not load model: {e}")
             else:
-                st.warning("No valid predictions could be generated from the uploaded data.")
+                logger.info("Running batch predictions for %d employees", len(records_df))
+                batch_results: List[Dict[str, Any]] = []
+                progress_bar = st.progress(0)
+
+                # Process each row and collect predictions
+                for i, (_, row) in enumerate(records_df.iterrows()):
+                    try:
+                        risks = predict_tenure_risk(
+                            row.to_dict(), horizons=tenure_horizons, model=estimator
+                        )
+                        for r in risks:
+                            batch_results.append({"record_index": i + 1, **r.__dict__})
+                    except Exception as e:
+                        logger.warning("Prediction failed for row %d: %s", i + 1, e)
+                        st.warning(f"Skipping prediction for row {i + 1} due to an error: {e}")
+                    progress_bar.progress((i + 1) / len(records_df))
+
+                if batch_results:
+                    batch_df = pd.DataFrame(batch_results)
+                    st.success(
+                        f"Generated predictions for {batch_df['record_index'].nunique()} employees."
+                    )
+
+                    # Display results in a tidy format and as a pivot table
+                    st.dataframe(
+                        batch_df.style.format(
+                            {"termination_probability": "{:.2%}", "confidence": "{:.2%}"}
+                        )
+                    )
+                    st.subheader("Risk Probability Pivot Table")
+                    pivot_table = batch_df.pivot_table(
+                        index="record_index", columns="tenure_years", values="termination_probability"
+                    )
+                    st.dataframe(pivot_table.style.format("{:.2%}"))
+
+                    # Provide a download button for the results
+                    timestamp = pd.Timestamp.now().strftime("%Y%m%d_%H%M%S")
+                    report_path = REPORTS_DIR / f"prediction_report_{timestamp}.csv"
+                    REPORTS_DIR.mkdir(parents=True, exist_ok=True)
+                    csv_bytes = batch_df.to_csv(index=False).encode("utf-8")
+                    st.download_button(
+                        "📥 Download Full Report (CSV)",
+                        data=csv_bytes,
+                        file_name=report_path.name,
+                        mime="text/csv",
+                    )
+                else:
+                    st.warning("No valid predictions could be generated from the uploaded data.")
         elif records_df is not None:
             st.warning("The uploaded file is empty.")
