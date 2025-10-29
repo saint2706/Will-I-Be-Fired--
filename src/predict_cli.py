@@ -20,7 +20,7 @@ from __future__ import annotations
 import argparse
 import json
 from pathlib import Path
-from typing import Any, Dict, Iterable, Sequence
+from typing import Any, Dict, Iterable, List, Sequence
 
 try:
     from .inference import DEFAULT_MODEL_PATH, TenureRisk, predict_tenure_risk
@@ -98,10 +98,12 @@ def _prompt_user(prompts: Dict[str, str]) -> Dict[str, str]:
     return responses
 
 
-def _load_employee_json(path: Path) -> Dict:
-    """Load an employee record from a JSON file.
+def _load_employee_json(path: Path) -> List[Dict[str, Any]]:
+    """Load employee records from a JSON file.
 
-    If the JSON file contains a list of records, only the first one is used.
+    If the JSON file contains a single record, it is wrapped in a list so the
+    caller can treat the result uniformly. When a list of records is provided,
+    all entries are preserved.
 
     Parameters
     ----------
@@ -110,7 +112,7 @@ def _load_employee_json(path: Path) -> Dict:
 
     Returns
     -------
-    A dictionary representing the employee record.
+    A list of dictionaries representing the employee records.
 
     Raises
     ------
@@ -124,10 +126,8 @@ def _load_employee_json(path: Path) -> Dict:
     if isinstance(data, list):
         if not data:
             raise ValueError(f"Employee JSON file is empty: {path}")
-        if len(data) > 1:
-            logger.warning("Multiple records found in %s; only the first will be used.", path)
-        return data[0]
-    return data
+        return data
+    return [data]
 
 
 def _parse_numeric(value: str) -> float:
@@ -175,8 +175,8 @@ def _normalise_inputs(payload: Dict[str, str]) -> Dict[str, Any]:
     return normalised
 
 
-def _build_record(args: argparse.Namespace) -> Dict[str, Any]:
-    """Construct the employee record from either JSON or user prompts.
+def _build_records(args: argparse.Namespace) -> List[Dict[str, Any]]:
+    """Construct one or more employee records from JSON or user prompts.
 
     Parameters
     ----------
@@ -185,13 +185,13 @@ def _build_record(args: argparse.Namespace) -> Dict[str, Any]:
 
     Returns
     -------
-    A dictionary of the normalised employee record.
+    A list of dictionaries representing the normalised employee records.
     """
     if args.employee_json:
-        payload = _load_employee_json(args.employee_json)
+        payloads = _load_employee_json(args.employee_json)
     else:
-        payload = _prompt_user(DEFAULT_PROMPTS)
-    return _normalise_inputs(payload)
+        payloads = [_prompt_user(DEFAULT_PROMPTS)]
+    return [_normalise_inputs(payload) for payload in payloads]
 
 
 def _format_probability(probability: float) -> str:
@@ -229,12 +229,15 @@ def main() -> None:
     args = parse_args()
 
     try:
-        record = _build_record(args)
+        records = _build_records(args)
         horizons: Sequence[float] = tuple(args.horizons) if args.horizons else (1.0, 2.0, 5.0)
 
         logger.info("Running inference for horizons: %s", ", ".join(map(str, horizons)))
-        risks = predict_tenure_risk(record, horizons=horizons, model_path=args.model)
-        display_results(risks)
+        for index, record in enumerate(records, start=1):
+            logger.info("Processing record %d", index)
+            print(f"\n=== Employee record {index} ===")
+            risks = predict_tenure_risk(record, horizons=horizons, model_path=args.model)
+            display_results(risks)
     except Exception as e:
         logger.exception("An error occurred during prediction.")
         print(f"\nError: {e}")
