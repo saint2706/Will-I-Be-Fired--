@@ -41,15 +41,19 @@ DATE_COLUMNS: Sequence[str] = (
     "LastPerformanceReview_Date",
 )
 
-# Numeric features to be used in the model.
-# These will typically be scaled and imputed.
-NUMERIC_FEATURES: Sequence[str] = (
+# Raw numeric inputs that must be provided by the user or source dataset.
+RAW_NUMERIC_INPUTS: Sequence[str] = (
     "Salary",
     "EngagementSurvey",
     "EmpSatisfaction",
     "SpecialProjectsCount",
     "DaysLateLast30",
     "Absences",
+)
+
+# Numeric features to be used in the model.
+# These will typically be scaled and imputed.
+NUMERIC_FEATURES: Sequence[str] = RAW_NUMERIC_INPUTS + (
     "tenure_years",  # Engineered feature
     "age_years",  # Engineered feature
     "years_since_last_review",  # Engineered feature
