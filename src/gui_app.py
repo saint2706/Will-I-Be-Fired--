@@ -35,7 +35,7 @@ import streamlit as st
 from plotly.subplots import make_subplots
 
 try:
-    from .feature_engineering import CATEGORICAL_FEATURES, NUMERIC_FEATURES
+    from .feature_engineering import CATEGORICAL_FEATURES, RAW_NUMERIC_INPUTS
     from .inference import (
         DEFAULT_MODEL_PATH,
         DEFAULT_TENURE_HORIZONS,
@@ -45,7 +45,7 @@ try:
     )
     from .logging_utils import configure_logging, get_logger
 except ImportError:  # pragma: no cover - fallback for script execution
-    from feature_engineering import CATEGORICAL_FEATURES, NUMERIC_FEATURES
+    from feature_engineering import CATEGORICAL_FEATURES, RAW_NUMERIC_INPUTS
     from inference import (
         DEFAULT_MODEL_PATH,
         DEFAULT_TENURE_HORIZONS,
@@ -114,7 +114,7 @@ def prepare_reference_metadata() -> Tuple[Dict[str, List], Dict[str, float], Dic
             categorical_options[column] = options or ["Unknown"]
 
     # Use median for numeric defaults
-    for column in NUMERIC_FEATURES:
+    for column in RAW_NUMERIC_INPUTS:
         if column in dataset.columns:
             numeric_defaults[column] = float(dataset[column].dropna().median())
 
@@ -129,7 +129,7 @@ def prepare_reference_metadata() -> Tuple[Dict[str, List], Dict[str, float], Dic
     today = pd.Timestamp.today().date()
     for column in DATE_FIELDS:
         date_defaults.setdefault(column, today)
-    for column in NUMERIC_FEATURES:
+    for column in RAW_NUMERIC_INPUTS:
         numeric_defaults.setdefault(column, 0.0)
 
     return categorical_options, numeric_defaults, date_defaults
@@ -296,7 +296,7 @@ with single_tab:
         for i, col_name in enumerate(CATEGORICAL_FEATURES):
             with form_cols[i % 3]:
                 record[col_name] = st.selectbox(col_name, options=categorical_options.get(col_name, ["Unknown"]))
-        for i, col_name in enumerate(NUMERIC_FEATURES):
+        for i, col_name in enumerate(RAW_NUMERIC_INPUTS):
             with form_cols[i % 3]:
                 record[col_name] = st.number_input(col_name, value=numeric_defaults.get(col_name, 0.0))
         for i, col_name in enumerate(DATE_FIELDS):
