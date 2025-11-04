@@ -7,3 +7,15 @@ __pycache__/
 .DS_Store
 .venv/
 !/models/best_model.joblib
+
+# Test and coverage artifacts
+.coverage
+.coverage.*
+htmlcov/
+.pytest_cache/
+
+# Generated reports (regenerate with training)
+reports/figures/*.png
+reports/*.json
+reports/*.csv
+reports/*.md
