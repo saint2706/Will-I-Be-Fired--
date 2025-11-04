@@ -172,7 +172,15 @@ def _is_model_entry(payload: Any) -> bool:
     bool
         True if the payload has the expected model structure with validation/test splits.
     """
-    return isinstance(payload, dict) and "validation" in payload and "test" in payload
+    if not isinstance(payload, dict):
+        return False
+    # Check that both validation and test keys exist and are dictionaries
+    return (
+        "validation" in payload
+        and "test" in payload
+        and isinstance(payload.get("validation"), dict)
+        and isinstance(payload.get("test"), dict)
+    )
 
 
 def build_metrics_table(metrics: Optional[Dict]) -> Optional[pd.DataFrame]:
@@ -190,13 +198,22 @@ def build_metrics_table(metrics: Optional[Dict]) -> Optional[pd.DataFrame]:
     if not metrics:
         return None
 
-    records = [
-        {"model": model_name, "split": split, "metric": metric_name, "value": value}
-        for model_name, payload in metrics.items()
-        if _is_model_entry(payload)
-        for split in ("validation", "test")
-        for metric_name, value in payload[split].items()
-    ]
+    records = []
+    for model_name, payload in metrics.items():
+        if not _is_model_entry(payload):
+            continue
+        for split in ("validation", "test"):
+            # Defensive check: ensure the split key exists and is a dict
+            if split not in payload or not isinstance(payload[split], dict):
+                logger.warning(
+                    "Model '%s' is missing or has invalid '%s' metrics. Skipping this split.",
+                    model_name,
+                    split,
+                )
+                continue
+            for metric_name, value in payload[split].items():
+                records.append({"model": model_name, "split": split, "metric": metric_name, "value": value})
+
     return pd.DataFrame(records)
 
 
