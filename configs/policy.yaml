@@ -1,0 +1,76 @@
+# Policy Configuration for Termination Risk Response
+# This file defines risk thresholds and corresponding HR actions
+
+risk_thresholds:
+  low: 0.10           # 0-10%: Low risk
+  low_moderate: 0.30  # 10-30%: Low-moderate risk
+  moderate: 0.60      # 30-60%: Moderate risk
+  high: 1.00          # 60%+: High risk
+
+action_mappings:
+  low:
+    label: "Low Risk"
+    color: "green"
+    actions:
+      - "Continue standard management (monthly/quarterly 1:1s)"
+      - "Focus on development and growth opportunities"
+      - "Maintain recognition programs"
+    priority: "routine"
+  
+  low_moderate:
+    label: "Low-Moderate Risk"
+    color: "yellow"
+    actions:
+      - "Increase to bi-weekly 1:1s with manager"
+      - "Review engagement survey responses"
+      - "Assess workload and project assignments"
+      - "Offer skills development opportunities"
+    priority: "monitor"
+  
+  moderate:
+    label: "Moderate Risk"
+    color: "orange"
+    actions:
+      - "Move to weekly manager 1:1s for 4-6 weeks"
+      - "Conduct off-cycle compensation review"
+      - "Schedule career pathing session with HR"
+      - "Explore flexible work arrangements"
+      - "Assign mentor or professional coach"
+      - "Consider high-visibility special projects"
+    priority: "intervene"
+  
+  high:
+    label: "High Risk"
+    color: "red"
+    actions:
+      - "Immediate HR escalation (within 24 hours)"
+      - "Schedule urgent retention meeting"
+      - "Conduct structured stay interview"
+      - "Evaluate retention package (bonus, salary, role change)"
+      - "Implement daily/bi-weekly check-ins"
+      - "Proactive mental health/EAP outreach"
+    priority: "critical"
+
+# Calibration settings
+calibration:
+  enabled: true
+  method: "sigmoid"  # isotonic or sigmoid
+  cv_folds: 5
+
+# Privacy and ethics settings
+privacy:
+  min_reporting_group_size: 5  # Minimum group size for demographic reporting
+  require_consent: false         # Whether explicit employee consent is needed
+  data_retention_days: 365       # How long to retain prediction history
+
+# Impact tracking
+tracking:
+  intervention_success_rates:
+    low_moderate: 0.50  # Expected risk reduction
+    moderate: 0.40
+    high: 0.30
+  cost_per_intervention:
+    low_moderate: 2000   # USD
+    moderate: 5000
+    high: 10000
+  cost_per_replacement: 100000  # Average cost to replace an employee

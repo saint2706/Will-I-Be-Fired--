@@ -1,7 +1,7 @@
 import argparse
 import json
-from pathlib import Path
 import sys
+from pathlib import Path
 
 sys.path.append(str(Path(__file__).resolve().parents[1] / "src"))
 import predict_cli  # noqa: E402
@@ -23,10 +23,17 @@ def test_main_processes_multiple_records(tmp_path, monkeypatch, capsys):
     employee_file = tmp_path / "employees.json"
     employee_file.write_text(json.dumps(records))
 
-    args = argparse.Namespace(employee_json=employee_file, model=Path("dummy.joblib"), horizons=None)
+    args = argparse.Namespace(
+        employee_json=employee_file,
+        model=Path("dummy.joblib"),
+        horizons=None,
+        calibrate=False,
+        policy_config=Path("dummy_policy.yaml"),
+    )
 
     monkeypatch.setattr(predict_cli, "parse_args", lambda: args)
     monkeypatch.setattr(predict_cli, "configure_logging", lambda: None)
+    monkeypatch.setattr(predict_cli, "set_global_seed", lambda x: None)
 
     seen_records = []
 

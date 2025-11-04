@@ -8,6 +8,7 @@ logger instance.
 By centralizing the configuration, we can easily change the log level or
 format for the entire application in one place.
 """
+
 from __future__ import annotations
 
 import logging

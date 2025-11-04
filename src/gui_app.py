@@ -22,6 +22,7 @@ Helper functions are used to load data, prepare UI components, and generate
 visualizations, with heavy use of Streamlit's caching to ensure a responsive
 user experience.
 """
+
 from __future__ import annotations
 
 import json
@@ -189,9 +190,7 @@ def _best_model_name(metrics: Optional[Dict]) -> Optional[str]:
     return max(metrics.items(), key=lambda item: item[1]["validation"].get("roc_auc", 0.0))[0]
 
 
-def build_combined_figure(
-    best_metrics: Optional[Dict], risks: Optional[Sequence[TenureRisk]]
-) -> go.Figure:
+def build_combined_figure(best_metrics: Optional[Dict], risks: Optional[Sequence[TenureRisk]]) -> go.Figure:
     """Create a combined Plotly figure with model metrics and risk predictions.
 
     The figure contains two subplots:
@@ -235,9 +234,7 @@ def build_combined_figure(
             col=2,
         )
         fig.add_trace(
-            go.Scatter(
-                x=horizons, y=confidences, mode="lines+markers", name="Confidence", line_dash="dash"
-            ),
+            go.Scatter(x=horizons, y=confidences, mode="lines+markers", name="Confidence", line_dash="dash"),
             row=1,
             col=2,
         )
@@ -255,9 +252,7 @@ metrics_payload = load_metrics()
 metrics_table = build_metrics_table(metrics_payload)
 best_model_name = _best_model_name(metrics_payload)
 best_model_metrics = (
-    metrics_payload.get(best_model_name, {}).get("test")
-    if best_model_name and metrics_payload
-    else None
+    metrics_payload.get(best_model_name, {}).get("test") if best_model_name and metrics_payload else None
 )
 
 # --- Sidebar ---
@@ -275,9 +270,9 @@ with st.sidebar:
     if metrics_table is not None:
         st.header("📊 Model Metrics")
         st.dataframe(
-            metrics_table.pivot_table(
-                index="model", columns="metric", values="value", aggfunc="first"
-            ).style.format("{:.3f}")
+            metrics_table.pivot_table(index="model", columns="metric", values="value", aggfunc="first").style.format(
+                "{:.3f}"
+            )
         )
     else:
         st.info("Run `src/train_model.py` to generate evaluation metrics.")
@@ -310,17 +305,11 @@ with single_tab:
         try:
             logger.info("Running single-record prediction with horizons: %s", tenure_horizons)
             estimator = load_prediction_model(model_path_input)
-            risks_state = predict_tenure_risk(
-                record, horizons=tenure_horizons, model=estimator
-            )
+            risks_state = predict_tenure_risk(record, horizons=tenure_horizons, model=estimator)
             st.success("Prediction complete!")
             # Display results in a table
             risk_df = pd.DataFrame([r.__dict__ for r in risks_state])
-            st.dataframe(
-                risk_df.style.format(
-                    {"termination_probability": "{:.2%}", "confidence": "{:.2%}"}
-                )
-            )
+            st.dataframe(risk_df.style.format({"termination_probability": "{:.2%}", "confidence": "{:.2%}"}))
             # Display the combined visualization
             fig = build_combined_figure(best_model_metrics, risks_state)
             st.plotly_chart(fig, use_container_width=True)
@@ -336,9 +325,7 @@ with single_tab:
 # --- Batch Upload Tab ---
 with batch_tab:
     st.subheader("Upload a file for batch predictions")
-    uploaded_file = st.file_uploader(
-        "Upload employee records", type=["csv", "json"], accept_multiple_files=False
-    )
+    uploaded_file = st.file_uploader("Upload employee records", type=["csv", "json"], accept_multiple_files=False)
 
     if uploaded_file:
         try:
@@ -367,9 +354,7 @@ with batch_tab:
                 # Process each row and collect predictions
                 for i, (_, row) in enumerate(records_df.iterrows()):
                     try:
-                        risks = predict_tenure_risk(
-                            row.to_dict(), horizons=tenure_horizons, model=estimator
-                        )
+                        risks = predict_tenure_risk(row.to_dict(), horizons=tenure_horizons, model=estimator)
                         for r in risks:
                             batch_results.append({"record_index": i + 1, **r.__dict__})
                     except Exception as e:
@@ -379,16 +364,10 @@ with batch_tab:
 
                 if batch_results:
                     batch_df = pd.DataFrame(batch_results)
-                    st.success(
-                        f"Generated predictions for {batch_df['record_index'].nunique()} employees."
-                    )
+                    st.success(f"Generated predictions for {batch_df['record_index'].nunique()} employees.")
 
                     # Display results in a tidy format and as a pivot table
-                    st.dataframe(
-                        batch_df.style.format(
-                            {"termination_probability": "{:.2%}", "confidence": "{:.2%}"}
-                        )
-                    )
+                    st.dataframe(batch_df.style.format({"termination_probability": "{:.2%}", "confidence": "{:.2%}"}))
                     st.subheader("Risk Probability Pivot Table")
                     pivot_table = batch_df.pivot_table(
                         index="record_index", columns="tenure_years", values="termination_probability"

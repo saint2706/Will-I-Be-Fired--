@@ -15,17 +15,24 @@ In both modes, the script uses the `predict_tenure_risk` function from the
 `inference` module to calculate risk at specified tenure horizons and prints
 a formatted table of the results to the console.
 """
+
 from __future__ import annotations
 
 import argparse
 import json
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Sequence
+from typing import Any, Dict, Iterable, List, Sequence, Tuple
+
+import yaml
 
 try:
+    from .constants import RANDOM_SEED
     from .inference import DEFAULT_MODEL_PATH, TenureRisk, predict_tenure_risk
+    from .utils.repro import set_global_seed
 except ImportError:  # pragma: no cover - fallback for script execution
+    from constants import RANDOM_SEED
     from inference import DEFAULT_MODEL_PATH, TenureRisk, predict_tenure_risk
+    from utils.repro import set_global_seed
 
 try:
     from .logging_utils import configure_logging, get_logger
@@ -33,6 +40,9 @@ except ImportError:  # pragma: no cover - fallback for script execution
     from logging_utils import configure_logging, get_logger
 
 logger = get_logger(__name__)
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+POLICY_CONFIG_PATH = PROJECT_ROOT / "configs" / "policy.yaml"
 
 # Default values for the interactive user prompts.
 DEFAULT_PROMPTS = {
@@ -73,6 +83,17 @@ def parse_args() -> argparse.Namespace:
         nargs="*",
         default=None,
         help="Optional tenure horizons in years (default: 1, 2, 5)",
+    )
+    parser.add_argument(
+        "--calibrate",
+        action="store_true",
+        help="Enable calibration display and show recommended actions based on policy.yaml",
+    )
+    parser.add_argument(
+        "--policy-config",
+        type=Path,
+        default=POLICY_CONFIG_PATH,
+        help="Path to policy.yaml configuration file",
     )
     return parser.parse_args()
 
@@ -199,15 +220,81 @@ def _format_probability(probability: float) -> str:
     return f"{probability:.2%}"
 
 
-def display_results(risks: Iterable[TenureRisk]) -> None:
+def load_policy_config(config_path: Path) -> Dict[str, Any]:
+    """Load policy configuration from YAML file.
+
+    Parameters
+    ----------
+    config_path : Path
+        Path to policy.yaml
+
+    Returns
+    -------
+    Dict[str, Any]
+        Policy configuration dictionary
+    """
+    if not config_path.exists():
+        logger.warning(f"Policy config not found at {config_path}, using defaults")
+        return {
+            "risk_thresholds": {"low": 0.10, "low_moderate": 0.30, "moderate": 0.60, "high": 1.00},
+            "action_mappings": {},
+        }
+
+    with open(config_path, "r") as f:
+        return yaml.safe_load(f)
+
+
+def get_risk_band_and_actions(probability: float, policy_config: Dict[str, Any]) -> Tuple[str, List[str]]:
+    """Determine risk band and recommended actions for a given probability.
+
+    Parameters
+    ----------
+    probability : float
+        Predicted termination probability
+    policy_config : Dict[str, Any]
+        Policy configuration
+
+    Returns
+    -------
+    Tuple[str, List[str]]
+        (risk_band, recommended_actions)
+    """
+    thresholds = policy_config.get("risk_thresholds", {})
+    mappings = policy_config.get("action_mappings", {})
+
+    if probability < thresholds.get("low", 0.10):
+        band = "low"
+    elif probability < thresholds.get("low_moderate", 0.30):
+        band = "low_moderate"
+    elif probability < thresholds.get("moderate", 0.60):
+        band = "moderate"
+    else:
+        band = "high"
+
+    band_info = mappings.get(band, {})
+    label = band_info.get("label", band.replace("_", " ").title())
+    actions = band_info.get("actions", [])
+
+    return label, actions
+
+
+def display_results(
+    risks: Iterable[TenureRisk], show_actions: bool = False, policy_config: Dict[str, Any] = None
+) -> None:
     """Print a formatted table of tenure risk predictions.
 
     Parameters
     ----------
     risks:
         An iterable of `TenureRisk` objects.
+    show_actions : bool
+        Whether to display recommended actions
+    policy_config : Dict[str, Any]
+        Policy configuration for action recommendations
     """
     header = f"{'Tenure':<10}{'Probability':<15}{'Confidence':<15}"
+    if show_actions:
+        header += f"{'Risk Band':<20}"
     print("\n--- Predicted Termination Risk ---")
     print(header)
     print("-" * len(header))
@@ -220,15 +307,40 @@ def display_results(risks: Iterable[TenureRisk]) -> None:
         tenure_str = f"{risk.tenure_years:>6.1f} yrs"
         prob_str = _format_probability(risk.termination_probability)
         conf_str = _format_probability(risk.confidence)
-        print(f"{tenure_str:<10}{prob_str:<15}{conf_str:<15}")
+        line = f"{tenure_str:<10}{prob_str:<15}{conf_str:<15}"
+
+        if show_actions and policy_config:
+            band_label, actions = get_risk_band_and_actions(risk.termination_probability, policy_config)
+            line += f"{band_label:<20}"
+
+        print(line)
+
+    # Display recommended actions for the first risk (typically current tenure)
+    if show_actions and policy_config and risks:
+        first_risk = list(risks)[0]
+        band_label, actions = get_risk_band_and_actions(first_risk.termination_probability, policy_config)
+
+        print(f"\n--- Recommended Actions ({band_label}) ---")
+        if actions:
+            for i, action in enumerate(actions, 1):
+                print(f"{i}. {action}")
+        else:
+            print("No specific actions configured for this risk band.")
 
 
 def main() -> None:
     """Main entry point for the CLI application."""
     configure_logging()
+    set_global_seed(RANDOM_SEED)
     args = parse_args()
 
     try:
+        # Load policy config if calibration is requested
+        policy_config = None
+        if args.calibrate:
+            policy_config = load_policy_config(args.policy_config)
+            logger.info(f"Loaded policy configuration from {args.policy_config}")
+
         records = _build_records(args)
         horizons: Sequence[float] = tuple(args.horizons) if args.horizons else (1.0, 2.0, 5.0)
 
@@ -237,7 +349,7 @@ def main() -> None:
             logger.info("Processing record %d", index)
             print(f"\n=== Employee record {index} ===")
             risks = predict_tenure_risk(record, horizons=horizons, model_path=args.model)
-            display_results(risks)
+            display_results(risks, show_actions=args.calibrate, policy_config=policy_config)
     except Exception as e:
         logger.exception("An error occurred during prediction.")
         print(f"\nError: {e}")
