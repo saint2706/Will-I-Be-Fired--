@@ -17,13 +17,19 @@ def test_streamlit_config_exists():
 
 
 def test_streamlit_version():
-    """Verify that Streamlit version is compatible (< 1.40 to avoid module loading bugs)."""
+    """Verify that Streamlit version is compatible (1.39.x or earlier to avoid module loading bugs)."""
     import streamlit
 
     version = streamlit.__version__
-    major, minor = map(int, version.split(".")[:2])
+    try:
+        # Parse semantic version format (major.minor.patch)
+        version_parts = version.split(".")
+        major = int(version_parts[0])
+        minor = int(version_parts[1]) if len(version_parts) > 1 else 0
+    except (ValueError, IndexError) as e:
+        pytest.fail(f"Could not parse Streamlit version {version}: {e}")
 
-    # Verify version is 1.39.0 or compatible version that doesn't have dynamic module loading issues
+    # Verify version is 1.39.x or earlier (versions 1.40.0+ have dynamic module loading issues)
     assert (major, minor) < (1, 40), f"Streamlit version {version} may have dynamic module loading issues"
 
 
