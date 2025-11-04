@@ -1,25 +1,13 @@
-# Streamlit Configuration
-# This file configures Streamlit server settings to fix dynamic module loading errors
-
 [server]
-# Enable CORS to allow cross-origin requests for dynamically loaded modules
+# Enable CORS for cross-origin requests (required for deployed apps)
 enableCORS = true
 
-# Enable XSRF protection
-enableXsrfProtection = true
+# Enable WebSocket compression for better performance
+enableWebsocketCompression = true
 
-# Set the base URL path for the application
-# This helps with proper module resolution in deployed environments
-headless = true
+# Set max upload size (in MB) for batch file uploads
+maxUploadSize = 200
 
 [browser]
-# Ensure the browser can load dynamic modules
+# Don't try to gather usage stats
 gatherUsageStats = false
-
-[theme]
-# Optional: Define a consistent theme
-primaryColor = "#F63366"
-backgroundColor = "#FFFFFF"
-secondaryBackgroundColor = "#F0F2F6"
-textColor = "#262730"
-font = "sans serif"
