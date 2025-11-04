@@ -16,6 +16,7 @@ The feature lists (numeric, categorical, date columns) are centralized here
 to simplify maintenance and ensure that all downstream components (training,
 inference, GUI) use a consistent feature set.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -183,9 +184,7 @@ def _resolve_reference_date(df: pd.DataFrame, reference_date: Optional[pd.Timest
     return today
 
 
-def engineer_temporal_features(
-    df: pd.DataFrame, *, reference_date: Optional[pd.Timestamp] = None
-) -> pd.DataFrame:
+def engineer_temporal_features(df: pd.DataFrame, *, reference_date: Optional[pd.Timestamp] = None) -> pd.DataFrame:
     """Derive tenure, age, and recency features from date columns.
 
     This function calculates key temporal features:

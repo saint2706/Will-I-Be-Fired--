@@ -9,6 +9,7 @@ the trained model pipeline. It supports:
 - A specialized function (`predict_tenure_risk`) to estimate termination
   risk at various future tenure horizons (e.g., at 1, 2, and 5 years post-hire).
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -94,9 +95,7 @@ def _ensure_model(model: Optional[Pipeline], model_path: Path) -> Pipeline:
     return model
 
 
-def prepare_features_for_inference(
-    records: Records, *, reference_date: Optional[pd.Timestamp] = None
-) -> pd.DataFrame:
+def prepare_features_for_inference(records: Records, *, reference_date: Optional[pd.Timestamp] = None) -> pd.DataFrame:
     """Return a DataFrame formatted for the trained pipeline.
 
     This is a thin wrapper around `prepare_inference_frame` from the feature

@@ -11,6 +11,7 @@ This script orchestrates the end-to-end model training process, including:
 The main execution flow is managed by the `run_training` function. The script
 can be configured via command-line arguments to specify input and output paths.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -33,13 +34,13 @@ from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import OneHotEncoder, StandardScaler
 
 try:
+    from .analysis.failures import analyze_failures_from_test
     from .constants import RANDOM_SEED
     from .feature_engineering import (
         CATEGORICAL_FEATURES,
         NUMERIC_FEATURES,
         prepare_training_data,
     )
-    from .utils.repro import set_global_seed
     from .utils.metrics import compute_metrics_with_ci, format_metric_with_ci
     from .utils.plotting import (
         plot_calibration_curve,
@@ -47,15 +48,15 @@ try:
         plot_pr_with_ci,
         plot_roc_with_ci,
     )
-    from .analysis.failures import analyze_failures_from_test
+    from .utils.repro import set_global_seed
 except ImportError:  # pragma: no cover - fallback for script execution
+    from analysis.failures import analyze_failures_from_test
     from constants import RANDOM_SEED
     from feature_engineering import (
         CATEGORICAL_FEATURES,
         NUMERIC_FEATURES,
         prepare_training_data,
     )
-    from utils.repro import set_global_seed
     from utils.metrics import compute_metrics_with_ci, format_metric_with_ci
     from utils.plotting import (
         plot_calibration_curve,
@@ -63,7 +64,7 @@ except ImportError:  # pragma: no cover - fallback for script execution
         plot_pr_with_ci,
         plot_roc_with_ci,
     )
-    from analysis.failures import analyze_failures_from_test
+    from utils.repro import set_global_seed
 
 try:
     from .logging_utils import configure_logging, get_logger
@@ -213,9 +214,7 @@ def stratified_splits(X: pd.DataFrame, y: pd.Series, random_state: int = 42) -> 
     """
     logger.info("Creating stratified train/validation/test splits (70/15/15)")
     # First split: 70% train, 30% temporary (for val/test)
-    X_train, X_temp, y_train, y_temp = train_test_split(
-        X, y, test_size=0.3, stratify=y, random_state=random_state
-    )
+    X_train, X_temp, y_train, y_temp = train_test_split(X, y, test_size=0.3, stratify=y, random_state=random_state)
 
     # Second split: 50% of temporary becomes validation, 50% becomes test
     X_val, X_test, y_val, y_test = train_test_split(
@@ -382,7 +381,9 @@ def select_best_model(results: List[ModelResult]) -> ModelResult:
     The `ModelResult` object corresponding to the best-performing model.
     """
     best_model = max(results, key=lambda result: result.val_metrics["roc_auc"])
-    logger.info("Selected best model: %s (Validation ROC-AUC: %.4f)", best_model.name, best_model.val_metrics["roc_auc"])
+    logger.info(
+        "Selected best model: %s (Validation ROC-AUC: %.4f)", best_model.name, best_model.val_metrics["roc_auc"]
+    )
     return best_model
 
 
@@ -563,9 +564,7 @@ def compute_and_save_metrics_with_ci(
         f.write("| Metric | Mean | 95% CI Lower | 95% CI Upper |\n")
         f.write("|--------|------|--------------|---------------|\n")
         for metric_name, values in metrics_ci.items():
-            f.write(
-                f"| {metric_name} | {values['mean']:.3f} | {values['ci_lower']:.3f} | {values['ci_upper']:.3f} |\n"
-            )
+            f.write(f"| {metric_name} | {values['mean']:.3f} | {values['ci_lower']:.3f} | {values['ci_upper']:.3f} |\n")
     logger.info(f"Saved metrics markdown to {md_path}")
 
     return metrics_ci
@@ -595,9 +594,7 @@ def generate_diagnostic_plots(model: ImbPipeline, splits: SplitData, output_dir:
 
     # ROC curve
     logger.info("Generating ROC curve...")
-    plot_roc_with_ci(
-        y_true=splits.y_test.values, y_prob=y_prob, output_path=figures_dir / "roc.png", n_bootstrap=1000
-    )
+    plot_roc_with_ci(y_true=splits.y_test.values, y_prob=y_prob, output_path=figures_dir / "roc.png", n_bootstrap=1000)
 
     # PR curve
     logger.info("Generating Precision-Recall curve...")

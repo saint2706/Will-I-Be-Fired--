@@ -5,6 +5,7 @@ This module implements ablation experiments to understand the contribution of:
 - Date-derived features (tenure, age, years_since_last_review)
 - Feature selection (top-k most important features)
 """
+
 from __future__ import annotations
 
 import json
@@ -53,9 +54,7 @@ class AblationResult:
     cv_score_std: float
 
 
-def run_ablation_no_rebalancing(
-    X: pd.DataFrame, y: pd.Series, random_state: int = RANDOM_SEED
-) -> AblationResult:
+def run_ablation_no_rebalancing(X: pd.DataFrame, y: pd.Series, random_state: int = RANDOM_SEED) -> AblationResult:
     """Run ablation: remove class rebalancing (RandomOverSampler).
 
     Parameters
@@ -75,9 +74,7 @@ def run_ablation_no_rebalancing(
     logger.info("Running ablation: no class rebalancing")
 
     # Build preprocessor
-    numeric_transformer = Pipeline(
-        steps=[("imputer", SimpleImputer(strategy="median")), ("scaler", StandardScaler())]
-    )
+    numeric_transformer = Pipeline(steps=[("imputer", SimpleImputer(strategy="median")), ("scaler", StandardScaler())])
     categorical_transformer = Pipeline(
         steps=[
             ("imputer", SimpleImputer(strategy="most_frequent")),
@@ -123,9 +120,7 @@ def run_ablation_no_rebalancing(
     )
 
 
-def run_ablation_no_date_features(
-    X: pd.DataFrame, y: pd.Series, random_state: int = RANDOM_SEED
-) -> AblationResult:
+def run_ablation_no_date_features(X: pd.DataFrame, y: pd.Series, random_state: int = RANDOM_SEED) -> AblationResult:
     """Run ablation: remove date-derived features.
 
     Parameters
@@ -150,9 +145,7 @@ def run_ablation_no_date_features(
 
     numeric_features = [f for f in NUMERIC_FEATURES if f not in date_features]
 
-    numeric_transformer = Pipeline(
-        steps=[("imputer", SimpleImputer(strategy="median")), ("scaler", StandardScaler())]
-    )
+    numeric_transformer = Pipeline(steps=[("imputer", SimpleImputer(strategy="median")), ("scaler", StandardScaler())])
     categorical_transformer = Pipeline(
         steps=[
             ("imputer", SimpleImputer(strategy="most_frequent")),
@@ -266,14 +259,11 @@ def run_ablation_top_k_features(
         temp_pipeline.fit(X_train, y_train)
 
         # Get feature names after preprocessing
-        feature_names_out = (
-            list(NUMERIC_FEATURES)
-            + list(
-                temp_pipeline.named_steps["preprocess"]
-                .named_transformers_["categorical"]
-                .named_steps["onehot"]
-                .get_feature_names_out(CATEGORICAL_FEATURES)
-            )
+        feature_names_out = list(NUMERIC_FEATURES) + list(
+            temp_pipeline.named_steps["preprocess"]
+            .named_transformers_["categorical"]
+            .named_steps["onehot"]
+            .get_feature_names_out(CATEGORICAL_FEATURES)
         )
 
         # Compute permutation importance
@@ -291,19 +281,11 @@ def run_ablation_top_k_features(
     # Map back to original feature names (handle one-hot encoded features)
     selected_numeric = [f for f in NUMERIC_FEATURES if f in top_features]
     selected_categorical = list(
-        set(
-            [
-                f.split("_")[0] if "_" in f else f
-                for f in top_features
-                if any(cat in f for cat in CATEGORICAL_FEATURES)
-            ]
-        )
+        set([f.split("_")[0] if "_" in f else f for f in top_features if any(cat in f for cat in CATEGORICAL_FEATURES)])
     )
 
     # Build pipeline with selected features
-    numeric_transformer = Pipeline(
-        steps=[("imputer", SimpleImputer(strategy="median")), ("scaler", StandardScaler())]
-    )
+    numeric_transformer = Pipeline(steps=[("imputer", SimpleImputer(strategy="median")), ("scaler", StandardScaler())])
     categorical_transformer = Pipeline(
         steps=[
             ("imputer", SimpleImputer(strategy="most_frequent")),
@@ -313,7 +295,11 @@ def run_ablation_top_k_features(
     preprocessor = ColumnTransformer(
         transformers=[
             ("numeric", numeric_transformer, selected_numeric if selected_numeric else [NUMERIC_FEATURES[0]]),
-            ("categorical", categorical_transformer, selected_categorical if selected_categorical else [CATEGORICAL_FEATURES[0]]),
+            (
+                "categorical",
+                categorical_transformer,
+                selected_categorical if selected_categorical else [CATEGORICAL_FEATURES[0]],
+            ),
         ],
         remainder="drop",
     )
@@ -434,16 +420,12 @@ def write_ablation_markdown(results: List[AblationResult], output_path: Path) ->
         f.write("\n## Insights\n\n")
         f.write("### Impact of Class Rebalancing\n")
         no_rebal = next(r for r in results if r.experiment_name == "no_rebalancing")
-        f.write(
-            f"- Without rebalancing: ROC-AUC = {no_rebal.roc_auc:.3f}, Recall = {no_rebal.recall:.3f}\n"
-        )
+        f.write(f"- Without rebalancing: ROC-AUC = {no_rebal.roc_auc:.3f}, Recall = {no_rebal.recall:.3f}\n")
         f.write("- Class rebalancing significantly improves recall for the minority class (terminated employees)\n\n")
 
         f.write("### Impact of Date-Derived Features\n")
         no_dates = next(r for r in results if r.experiment_name == "no_date_features")
-        f.write(
-            f"- Without date features: ROC-AUC = {no_dates.roc_auc:.3f}\n"
-        )
+        f.write(f"- Without date features: ROC-AUC = {no_dates.roc_auc:.3f}\n")
         f.write("- Temporal features (tenure, age, review recency) are important for predicting termination risk\n\n")
 
         f.write("### Feature Selection Trade-offs\n")
@@ -453,7 +435,9 @@ def write_ablation_markdown(results: List[AblationResult], output_path: Path) ->
         f.write(f"- Top-5 features: ROC-AUC = {top_5.roc_auc:.3f}\n")
         f.write(f"- Top-10 features: ROC-AUC = {top_10.roc_auc:.3f}\n")
         f.write(f"- Top-20 features: ROC-AUC = {top_20.roc_auc:.3f}\n")
-        f.write("- A small set of features captures most predictive power; adding more features yields diminishing returns\n")
+        f.write(
+            "- A small set of features captures most predictive power; adding more features yields diminishing returns\n"
+        )
 
     logger.info(f"Wrote ablation markdown to {output_path}")
 

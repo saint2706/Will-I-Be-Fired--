@@ -1,5 +1,5 @@
-from pathlib import Path
 import sys
+from pathlib import Path
 
 import pandas as pd
 
@@ -36,14 +36,10 @@ def test_prepare_inference_frame_recomputes_temporal_features():
     tenure_years = prepared.loc[0, "tenure_years"]
     age_years = prepared.loc[0, "age_years"]
 
-    expected_tenure = (
-        pd.Timestamp("2021-01-01") - pd.Timestamp("2020-01-01")
-    ).days / 365.25
+    expected_tenure = (pd.Timestamp("2021-01-01") - pd.Timestamp("2020-01-01")).days / 365.25
     # Reference date resolves from the first available event column (last review here).
     resolved_reference = pd.Timestamp("2020-06-01")
-    expected_age = (
-        resolved_reference - pd.Timestamp("1990-01-01")
-    ).days / 365.25
+    expected_age = (resolved_reference - pd.Timestamp("1990-01-01")).days / 365.25
 
     assert abs(tenure_years - expected_tenure) < 1e-6
     assert abs(age_years - expected_age) < 1e-6

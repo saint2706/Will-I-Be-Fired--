@@ -1,4 +1,5 @@
 """Tests for utility modules: repro, metrics, and plotting."""
+
 import sys
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -9,8 +10,8 @@ import pytest
 sys.path.append(str(Path(__file__).resolve().parents[1] / "src"))
 
 from constants import RANDOM_SEED
-from utils.repro import set_global_seed
 from utils.metrics import bootstrap_metric, compute_metrics_with_ci, format_metric_with_ci
+from utils.repro import set_global_seed
 
 
 def test_set_global_seed():
@@ -44,9 +45,7 @@ def test_bootstrap_metric():
 
     from sklearn.metrics import accuracy_score
 
-    mean, lower, upper = bootstrap_metric(
-        y_true, y_pred, y_prob, accuracy_score, n_bootstrap=100, random_state=42
-    )
+    mean, lower, upper = bootstrap_metric(y_true, y_pred, y_prob, accuracy_score, n_bootstrap=100, random_state=42)
 
     # Check that mean is close to actual accuracy
     actual_acc = accuracy_score(y_true, y_pred)

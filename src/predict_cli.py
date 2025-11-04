@@ -15,6 +15,7 @@ In both modes, the script uses the `predict_tenure_risk` function from the
 `inference` module to calculate risk at specified tenure horizons and prints
 a formatted table of the results to the console.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -277,7 +278,9 @@ def get_risk_band_and_actions(probability: float, policy_config: Dict[str, Any])
     return label, actions
 
 
-def display_results(risks: Iterable[TenureRisk], show_actions: bool = False, policy_config: Dict[str, Any] = None) -> None:
+def display_results(
+    risks: Iterable[TenureRisk], show_actions: bool = False, policy_config: Dict[str, Any] = None
+) -> None:
     """Print a formatted table of tenure risk predictions.
 
     Parameters
