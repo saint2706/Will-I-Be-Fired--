@@ -190,9 +190,7 @@ def _best_model_name(metrics: Optional[Dict]) -> Optional[str]:
         return None
     # Filter to only entries that have validation metrics (exclude baselines)
     model_entries = {
-        name: payload
-        for name, payload in metrics.items()
-        if isinstance(payload, dict) and "validation" in payload
+        name: payload for name, payload in metrics.items() if isinstance(payload, dict) and "validation" in payload
     }
     if not model_entries:
         return None

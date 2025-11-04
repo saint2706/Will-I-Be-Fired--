@@ -4,11 +4,10 @@ import sys
 from pathlib import Path
 
 import pandas as pd
-import pytest
 
 sys.path.append(str(Path(__file__).resolve().parents[1] / "src"))
 
-from gui_app import _best_model_name, build_metrics_table
+from gui_app import _best_model_name, build_metrics_table  # noqa: E402
 
 
 def test_build_metrics_table_with_baselines():
