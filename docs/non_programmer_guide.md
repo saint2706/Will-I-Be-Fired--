@@ -18,7 +18,7 @@ want to understand the full pipeline and the meaning of every metric, continue t
 
 ## 2. How the data becomes predictions
 
-The workflow follows nine repeatable stages. You can re-run them with the scripts in the `src/` folder or by using the `make reproduce` command (explained in Section 5).
+The workflow follows nine repeatable stages. You can re-run them with the scripts in the `src/` folder or by using the `make reproduce` command (see "Option A: One-Command Reproducible Pipeline" in Section 5).
 
 1. **Load the data** – Read the CSV file into memory using pandas (a spreadsheet-like Python library). Every column is kept in
 a structured format so later steps can understand whether a value is text, a number, or a date.
@@ -125,7 +125,7 @@ Every metric is calculated twice: once on the validation set and once on the tes
 Follow these steps on macOS, Windows (with PowerShell), or Linux. Replace `<path>` with the actual folder where you stored the
 repository.
 
-1. **Install Python 3.11 or newer** (the project is tested with Python 3.11.9, specified in `.python-version`).
+1. **Install Python 3.11 or newer** (the project requires Python 3.11+, as specified in `pyproject.toml`. It is tested with Python 3.11.9 specified in `.python-version`, and should work with any Python 3.11.x or later versions).
 2. **Open a terminal** (Command Prompt, PowerShell, or Terminal app).
 3. **Move into the project folder:**
 
