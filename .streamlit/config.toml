@@ -2,7 +2,7 @@
 # Enable CORS for cross-origin requests (required for deployed apps)
 enableCORS = true
 
-# Allow WebSocket message origin checking
+# Enable WebSocket compression for better performance
 enableWebsocketCompression = true
 
 # Set max upload size (in MB) for batch file uploads
@@ -11,11 +11,3 @@ maxUploadSize = 200
 [browser]
 # Don't try to gather usage stats
 gatherUsageStats = false
-
-[theme]
-# Use default Streamlit theme
-primaryColor = "#F63366"
-backgroundColor = "#FFFFFF"
-secondaryBackgroundColor = "#F0F2F6"
-textColor = "#262730"
-font = "sans serif"
