@@ -33,17 +33,37 @@ from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import OneHotEncoder, StandardScaler
 
 try:
+    from .constants import RANDOM_SEED
     from .feature_engineering import (
         CATEGORICAL_FEATURES,
         NUMERIC_FEATURES,
         prepare_training_data,
     )
+    from .utils.repro import set_global_seed
+    from .utils.metrics import compute_metrics_with_ci, format_metric_with_ci
+    from .utils.plotting import (
+        plot_calibration_curve,
+        plot_feature_importance,
+        plot_pr_with_ci,
+        plot_roc_with_ci,
+    )
+    from .analysis.failures import analyze_failures_from_test
 except ImportError:  # pragma: no cover - fallback for script execution
+    from constants import RANDOM_SEED
     from feature_engineering import (
         CATEGORICAL_FEATURES,
         NUMERIC_FEATURES,
         prepare_training_data,
     )
+    from utils.repro import set_global_seed
+    from utils.metrics import compute_metrics_with_ci, format_metric_with_ci
+    from utils.plotting import (
+        plot_calibration_curve,
+        plot_feature_importance,
+        plot_pr_with_ci,
+        plot_roc_with_ci,
+    )
+    from analysis.failures import analyze_failures_from_test
 
 try:
     from .logging_utils import configure_logging, get_logger
@@ -55,6 +75,8 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 DATA_PATH = PROJECT_ROOT / "HRDataset_v14.csv"
 DEFAULT_MODEL_PATH = PROJECT_ROOT / "models" / "best_model.joblib"
 DEFAULT_METRICS_PATH = PROJECT_ROOT / "reports" / "metrics.json"
+REPORTS_DIR = PROJECT_ROOT / "reports"
+FIGURES_DIR = REPORTS_DIR / "figures"
 
 logger = get_logger(__name__)
 
@@ -227,8 +249,8 @@ def build_model_pipelines(
     logistic = ImbPipeline(
         steps=[
             ("preprocess", preprocessor),
-            ("sampler", RandomOverSampler(random_state=42)),
-            ("model", LogisticRegression(max_iter=1000, solver="lbfgs", random_state=42)),
+            ("sampler", RandomOverSampler(random_state=RANDOM_SEED)),
+            ("model", LogisticRegression(max_iter=1000, solver="lbfgs", random_state=RANDOM_SEED)),
         ]
     )
     logistic_grid = {"model__C": [0.1, 1.0, 10.0]}
@@ -237,8 +259,8 @@ def build_model_pipelines(
     forest = ImbPipeline(
         steps=[
             ("preprocess", preprocessor),
-            ("sampler", RandomOverSampler(random_state=42)),
-            ("model", RandomForestClassifier(random_state=42, n_jobs=-1)),
+            ("sampler", RandomOverSampler(random_state=RANDOM_SEED)),
+            ("model", RandomForestClassifier(random_state=RANDOM_SEED, n_jobs=-1)),
         ]
     )
     forest_grid = {
@@ -251,8 +273,8 @@ def build_model_pipelines(
     gradient_boost = ImbPipeline(
         steps=[
             ("preprocess", preprocessor),
-            ("sampler", RandomOverSampler(random_state=42)),
-            ("model", GradientBoostingClassifier(random_state=42)),
+            ("sampler", RandomOverSampler(random_state=RANDOM_SEED)),
+            ("model", GradientBoostingClassifier(random_state=RANDOM_SEED)),
         ]
     )
     gradient_grid = {
@@ -388,11 +410,234 @@ def save_metrics(results: List[ModelResult], metrics_path: Path) -> None:
     logger.info("Saved metrics report to %s", metrics_path)
 
 
+def save_split_summary(splits: SplitData, output_dir: Path) -> None:
+    """Save split statistics to JSON and CSV.
+
+    Parameters
+    ----------
+    splits : SplitData
+        The data splits
+    output_dir : Path
+        Directory to save outputs
+    """
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    # Compute statistics
+    summary = {
+        "train": {
+            "count": len(splits.y_train),
+            "positive_count": int(splits.y_train.sum()),
+            "positive_rate": float(splits.y_train.mean()),
+        },
+        "validation": {
+            "count": len(splits.y_val),
+            "positive_count": int(splits.y_val.sum()),
+            "positive_rate": float(splits.y_val.mean()),
+        },
+        "test": {
+            "count": len(splits.y_test),
+            "positive_count": int(splits.y_test.sum()),
+            "positive_rate": float(splits.y_test.mean()),
+        },
+    }
+
+    # Save JSON
+    json_path = output_dir / "split_summary.json"
+    with open(json_path, "w") as f:
+        json.dump(summary, f, indent=2)
+    logger.info(f"Saved split summary JSON to {json_path}")
+
+    # Save CSV
+    csv_records = []
+    for split_name, split_stats in summary.items():
+        csv_records.append(
+            {
+                "split": split_name,
+                "count": split_stats["count"],
+                "positive_count": split_stats["positive_count"],
+                "positive_rate": split_stats["positive_rate"],
+            }
+        )
+    df = pd.DataFrame(csv_records)
+    csv_path = output_dir / "splits.csv"
+    df.to_csv(csv_path, index=False)
+    logger.info(f"Saved split summary CSV to {csv_path}")
+
+
+def evaluate_baselines(splits: SplitData) -> Dict[str, Dict[str, float]]:
+    """Evaluate simple baseline models.
+
+    Parameters
+    ----------
+    splits : SplitData
+        The data splits
+
+    Returns
+    -------
+    Dict[str, Dict[str, float]]
+        Metrics for each baseline
+    """
+    import numpy as np
+    from sklearn.dummy import DummyClassifier
+
+    baselines = {}
+
+    # Majority class baseline
+    majority_clf = DummyClassifier(strategy="most_frequent", random_state=RANDOM_SEED)
+    majority_clf.fit(splits.X_train, splits.y_train)
+    y_pred = majority_clf.predict(splits.X_test)
+    y_prob = majority_clf.predict_proba(splits.X_test)[:, 1]
+
+    baselines["majority_class"] = {
+        "accuracy": float(accuracy_score(splits.y_test, y_pred)),
+        "precision": float(precision_score(splits.y_test, y_pred, zero_division=0)),
+        "recall": float(recall_score(splits.y_test, y_pred, zero_division=0)),
+        "roc_auc": float(roc_auc_score(splits.y_test, y_prob)) if len(np.unique(y_prob)) > 1 else 0.5,
+    }
+
+    # Stratified random baseline
+    stratified_clf = DummyClassifier(strategy="stratified", random_state=RANDOM_SEED)
+    stratified_clf.fit(splits.X_train, splits.y_train)
+    y_pred = stratified_clf.predict(splits.X_test)
+    y_prob = stratified_clf.predict_proba(splits.X_test)[:, 1]
+
+    baselines["stratified_random"] = {
+        "accuracy": float(accuracy_score(splits.y_test, y_pred)),
+        "precision": float(precision_score(splits.y_test, y_pred, zero_division=0)),
+        "recall": float(recall_score(splits.y_test, y_pred, zero_division=0)),
+        "roc_auc": float(roc_auc_score(splits.y_test, y_prob)),
+    }
+
+    logger.info("Evaluated baseline models")
+    return baselines
+
+
+def compute_and_save_metrics_with_ci(
+    model: ImbPipeline, splits: SplitData, output_dir: Path, n_bootstrap: int = 1000
+) -> Dict[str, Dict[str, float]]:
+    """Compute test metrics with bootstrap confidence intervals.
+
+    Parameters
+    ----------
+    model : ImbPipeline
+        Trained model
+    splits : SplitData
+        Data splits
+    output_dir : Path
+        Output directory
+    n_bootstrap : int
+        Number of bootstrap resamples
+
+    Returns
+    -------
+    Dict[str, Dict[str, float]]
+        Metrics with CIs
+    """
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    # Generate predictions
+    y_pred = model.predict(splits.X_test)
+    y_prob = model.predict_proba(splits.X_test)[:, 1]
+
+    # Compute metrics with CIs
+    import numpy as np
+
+    metrics_ci = compute_metrics_with_ci(
+        y_true=splits.y_test.values,
+        y_pred=y_pred,
+        y_prob=y_prob,
+        n_bootstrap=n_bootstrap,
+        random_state=RANDOM_SEED,
+    )
+
+    # Save JSON
+    json_path = output_dir / "metrics_with_ci.json"
+    with open(json_path, "w") as f:
+        json.dump(metrics_ci, f, indent=2)
+    logger.info(f"Saved metrics with CI to {json_path}")
+
+    # Save Markdown
+    md_path = output_dir / "metrics_with_ci.md"
+    with open(md_path, "w") as f:
+        f.write("# Test Metrics with 95% Confidence Intervals\n\n")
+        f.write("| Metric | Mean | 95% CI Lower | 95% CI Upper |\n")
+        f.write("|--------|------|--------------|---------------|\n")
+        for metric_name, values in metrics_ci.items():
+            f.write(
+                f"| {metric_name} | {values['mean']:.3f} | {values['ci_lower']:.3f} | {values['ci_upper']:.3f} |\n"
+            )
+    logger.info(f"Saved metrics markdown to {md_path}")
+
+    return metrics_ci
+
+
+def generate_diagnostic_plots(model: ImbPipeline, splits: SplitData, output_dir: Path) -> None:
+    """Generate all diagnostic plots.
+
+    Parameters
+    ----------
+    model : ImbPipeline
+        Trained model
+    splits : SplitData
+        Data splits
+    output_dir : Path
+        Output directory for figures
+    """
+    import numpy as np
+    from sklearn.inspection import permutation_importance
+
+    figures_dir = output_dir / "figures"
+    figures_dir.mkdir(parents=True, exist_ok=True)
+
+    # Generate predictions
+    y_pred = model.predict(splits.X_test)
+    y_prob = model.predict_proba(splits.X_test)[:, 1]
+
+    # ROC curve
+    logger.info("Generating ROC curve...")
+    plot_roc_with_ci(
+        y_true=splits.y_test.values, y_prob=y_prob, output_path=figures_dir / "roc.png", n_bootstrap=1000
+    )
+
+    # PR curve
+    logger.info("Generating Precision-Recall curve...")
+    plot_pr_with_ci(y_true=splits.y_test.values, y_prob=y_prob, output_path=figures_dir / "pr.png", n_bootstrap=1000)
+
+    # Calibration curve
+    logger.info("Generating calibration curve...")
+    plot_calibration_curve(y_true=splits.y_test.values, y_prob=y_prob, output_path=figures_dir / "calibration.png")
+
+    # Permutation importance
+    logger.info("Computing permutation importance...")
+    X_test_transformed = model.named_steps["preprocess"].transform(splits.X_test)
+
+    # Get feature names
+    feature_names_out = list(NUMERIC_FEATURES) + list(
+        model.named_steps["preprocess"]
+        .named_transformers_["categorical"]
+        .named_steps["onehot"]
+        .get_feature_names_out(CATEGORICAL_FEATURES)
+    )
+
+    perm_importance = permutation_importance(
+        model.named_steps["model"], X_test_transformed, splits.y_test, n_repeats=10, random_state=RANDOM_SEED, n_jobs=-1
+    )
+
+    plot_feature_importance(
+        feature_names=feature_names_out,
+        importance_values=perm_importance.importances_mean,
+        output_path=figures_dir / "perm_importance.png",
+        top_k=20,
+    )
+
+    logger.info("Generated all diagnostic plots")
+
+
 def run_training(
     data_path: Path = DATA_PATH,
     model_path: Path = DEFAULT_MODEL_PATH,
     metrics_path: Path = DEFAULT_METRICS_PATH,
-    random_state: int = 42,
+    random_state: int = RANDOM_SEED,
 ) -> ModelResult:
     """Execute the full training workflow and return the best model result.
 
@@ -414,11 +659,24 @@ def run_training(
     -------
     The `ModelResult` for the best-performing model.
     """
+    # Set global random seed
+    set_global_seed(random_state)
+    logger.info(f"Set global random seed to {random_state}")
+
     df = pd.read_csv(data_path)
     logger.info("Loaded dataset with %d rows from %s", len(df), data_path)
 
     X, y = prepare_features(df)
     splits = stratified_splits(X, y, random_state=random_state)
+
+    # Save split summary
+    save_split_summary(splits, REPORTS_DIR)
+
+    # Evaluate baselines
+    logger.info("Evaluating baseline models...")
+    baselines = evaluate_baselines(splits)
+
+    # Train models
     results = train_models(splits, random_state=random_state)
     best_model = select_best_model(results)
 
@@ -428,6 +686,24 @@ def run_training(
     logger.info("Persisted best model (%s) to %s", best_model.name, model_path)
     save_metrics(results, metrics_path)
 
+    # Compute metrics with confidence intervals
+    logger.info("Computing metrics with bootstrap confidence intervals...")
+    compute_and_save_metrics_with_ci(best_model.best_estimator, splits, REPORTS_DIR, n_bootstrap=1000)
+
+    # Generate diagnostic plots
+    logger.info("Generating diagnostic plots...")
+    generate_diagnostic_plots(best_model.best_estimator, splits, REPORTS_DIR)
+
+    # Failure analysis
+    logger.info("Running failure analysis...")
+    analyze_failures_from_test(splits.X_test, splits.y_test, best_model.best_estimator, REPORTS_DIR, top_n=10)
+
+    # Add baselines to metrics report
+    metrics_with_baselines = json.loads(metrics_path.read_text())
+    metrics_with_baselines["baselines"] = baselines
+    metrics_path.write_text(json.dumps(metrics_with_baselines, indent=2))
+
+    logger.info("Training pipeline complete!")
     return best_model
 
 
@@ -441,7 +717,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--metrics-output", type=Path, default=DEFAULT_METRICS_PATH, help="Destination for the metrics report (JSON)"
     )
-    parser.add_argument("--random-state", type=int, default=42, help="Random seed for reproducibility")
+    parser.add_argument("--random-state", type=int, default=RANDOM_SEED, help="Random seed for reproducibility")
     return parser.parse_args()
 
 
