@@ -1,0 +1,21 @@
+[server]
+# Enable CORS for cross-origin requests
+enableCORS = true
+
+# Disable XSRF protection which can interfere with dynamic module loading
+enableXsrfProtection = false
+
+# Set max upload size to 200MB for batch file uploads
+maxUploadSize = 200
+
+[browser]
+# Don't try to gather usage stats
+gatherUsageStats = false
+
+[theme]
+# Use default Streamlit theme
+primaryColor = "#F63366"
+backgroundColor = "#FFFFFF"
+secondaryBackgroundColor = "#F0F2F6"
+textColor = "#262730"
+font = "sans serif"
