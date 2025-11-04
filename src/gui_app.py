@@ -169,7 +169,8 @@ def _is_model_entry(payload: Any) -> bool:
 
     Returns
     -------
-    True if the payload has the expected model structure with validation/test splits.
+    bool
+        True if the payload has the expected model structure with validation/test splits.
     """
     return isinstance(payload, dict) and "validation" in payload and "test" in payload
 
