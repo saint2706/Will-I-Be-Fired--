@@ -7,7 +7,22 @@ import pandas as pd
 
 sys.path.append(str(Path(__file__).resolve().parents[1] / "src"))
 
-from gui_app import _best_model_name, build_metrics_table  # noqa: E402
+from gui_app import _best_model_name, _is_model_entry, build_metrics_table  # noqa: E402
+
+
+def test_is_model_entry():
+    """Test the helper function that identifies model entries."""
+    # Valid model entry with validation and test
+    valid_entry = {"validation": {"roc_auc": 0.95}, "test": {"roc_auc": 0.98}}
+    assert _is_model_entry(valid_entry) is True
+
+    # Invalid entries
+    assert _is_model_entry({"validation": {"roc_auc": 0.95}}) is False  # Missing test
+    assert _is_model_entry({"test": {"roc_auc": 0.98}}) is False  # Missing validation
+    assert _is_model_entry({"other": "data"}) is False  # Wrong structure
+    assert _is_model_entry(None) is False  # Not a dict
+    assert _is_model_entry("string") is False  # Not a dict
+    assert _is_model_entry([]) is False  # Not a dict
 
 
 def test_build_metrics_table_with_baselines():

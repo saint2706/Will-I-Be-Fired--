@@ -159,6 +159,21 @@ def load_prediction_model(model_path: str):
 
 
 # --- UI and Plotting Helpers ---
+def _is_model_entry(payload: Any) -> bool:
+    """Check if a metrics payload represents a model entry (not baselines).
+
+    Parameters
+    ----------
+    payload:
+        A value from the metrics dictionary.
+
+    Returns
+    -------
+    True if the payload has the expected model structure with validation/test splits.
+    """
+    return isinstance(payload, dict) and "validation" in payload and "test" in payload
+
+
 def build_metrics_table(metrics: Optional[Dict]) -> Optional[pd.DataFrame]:
     """Transform the nested metrics dictionary into a flat DataFrame.
 
@@ -177,7 +192,7 @@ def build_metrics_table(metrics: Optional[Dict]) -> Optional[pd.DataFrame]:
     records = [
         {"model": model_name, "split": split, "metric": metric_name, "value": value}
         for model_name, payload in metrics.items()
-        if isinstance(payload, dict) and "validation" in payload and "test" in payload
+        if _is_model_entry(payload)
         for split in ("validation", "test")
         for metric_name, value in payload[split].items()
     ]
@@ -189,9 +204,7 @@ def _best_model_name(metrics: Optional[Dict]) -> Optional[str]:
     if not metrics:
         return None
     # Filter to only entries that have validation metrics (exclude baselines)
-    model_entries = {
-        name: payload for name, payload in metrics.items() if isinstance(payload, dict) and "validation" in payload
-    }
+    model_entries = {name: payload for name, payload in metrics.items() if _is_model_entry(payload)}
     if not model_entries:
         return None
     return max(model_entries.items(), key=lambda item: item[1]["validation"].get("roc_auc", 0.0))[0]
