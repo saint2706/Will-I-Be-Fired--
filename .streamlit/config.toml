@@ -1,11 +1,11 @@
 [server]
-# Enable CORS for cross-origin requests
+# Enable CORS for cross-origin requests (required for deployed apps)
 enableCORS = true
 
-# Disable XSRF protection which can interfere with dynamic module loading
-enableXsrfProtection = false
+# Allow WebSocket message origin checking
+enableWebsocketCompression = true
 
-# Set max upload size to 200MB for batch file uploads
+# Set max upload size (in MB) for batch file uploads
 maxUploadSize = 200
 
 [browser]
