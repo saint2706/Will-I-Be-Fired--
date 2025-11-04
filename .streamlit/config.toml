@@ -1,0 +1,13 @@
+[server]
+# Enable CORS for cross-origin requests (required for deployed apps)
+enableCORS = true
+
+# Enable WebSocket compression for better performance
+enableWebsocketCompression = true
+
+# Set max upload size (in MB) for batch file uploads
+maxUploadSize = 200
+
+[browser]
+# Don't try to gather usage stats
+gatherUsageStats = false
