@@ -177,6 +177,7 @@ def build_metrics_table(metrics: Optional[Dict]) -> Optional[pd.DataFrame]:
     records = [
         {"model": model_name, "split": split, "metric": metric_name, "value": value}
         for model_name, payload in metrics.items()
+        if isinstance(payload, dict) and "validation" in payload and "test" in payload
         for split in ("validation", "test")
         for metric_name, value in payload[split].items()
     ]
@@ -187,7 +188,15 @@ def _best_model_name(metrics: Optional[Dict]) -> Optional[str]:
     """Identify the best model based on the validation ROC-AUC score."""
     if not metrics:
         return None
-    return max(metrics.items(), key=lambda item: item[1]["validation"].get("roc_auc", 0.0))[0]
+    # Filter to only entries that have validation metrics (exclude baselines)
+    model_entries = {
+        name: payload
+        for name, payload in metrics.items()
+        if isinstance(payload, dict) and "validation" in payload
+    }
+    if not model_entries:
+        return None
+    return max(model_entries.items(), key=lambda item: item[1]["validation"].get("roc_auc", 0.0))[0]
 
 
 def build_combined_figure(best_metrics: Optional[Dict], risks: Optional[Sequence[TenureRisk]]) -> go.Figure:
