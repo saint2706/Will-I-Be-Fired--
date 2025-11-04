@@ -213,7 +213,7 @@ def build_metrics_table(metrics: Optional[Dict]) -> Optional[pd.DataFrame]:
                 continue
             for metric_name, value in payload[split].items():
                 records.append({"model": model_name, "split": split, "metric": metric_name, "value": value})
-    
+
     return pd.DataFrame(records)
 
 
