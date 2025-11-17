@@ -45,6 +45,7 @@ try:
         predict_tenure_risk,
     )
     from .logging_utils import configure_logging, get_logger
+    from .schemas import EmployeeRecord, ValidationError
 except ImportError:  # pragma: no cover - fallback for script execution
     from feature_engineering import CATEGORICAL_FEATURES, RAW_NUMERIC_INPUTS
     from inference import (
@@ -55,6 +56,7 @@ except ImportError:  # pragma: no cover - fallback for script execution
         predict_tenure_risk,
     )
     from logging_utils import configure_logging, get_logger
+    from schemas import EmployeeRecord, ValidationError
 
 # Define project structure and default paths
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -70,6 +72,19 @@ logger = get_logger(__name__)
 st.set_page_config(page_title="Will I Be Fired?", layout="wide")
 st.title("Employee Termination Risk Dashboard")
 st.caption("Estimate risk, review model quality, and export reports.")
+
+if "single_form_errors" not in st.session_state:
+    st.session_state["single_form_errors"] = {}
+
+
+def _map_validation_errors(error: ValidationError) -> Dict[str, List[str]]:
+    """Convert a ValidationError into a mapping of field -> messages."""
+
+    field_errors: Dict[str, List[str]] = {}
+    for issue in error.errors():
+        loc = str(issue.get("loc", ["record"])[0])
+        field_errors.setdefault(loc, []).append(issue.get("msg"))
+    return field_errors
 
 
 # --- Data Loading and Caching ---
@@ -324,26 +339,35 @@ with single_tab:
     with st.form("single_employee_form"):
         form_cols = st.columns(3)
         record: Dict[str, Any] = {}
+        form_errors = st.session_state.get("single_form_errors", {})
 
         # Dynamically create input widgets for all required features
         for i, col_name in enumerate(CATEGORICAL_FEATURES):
             with form_cols[i % 3]:
                 record[col_name] = st.selectbox(col_name, options=categorical_options.get(col_name, ["Unknown"]))
+                for message in form_errors.get(col_name, []):
+                    st.caption(f"⚠️ {message}")
         for i, col_name in enumerate(RAW_NUMERIC_INPUTS):
             with form_cols[i % 3]:
                 record[col_name] = st.number_input(col_name, value=numeric_defaults.get(col_name, 0.0))
+                for message in form_errors.get(col_name, []):
+                    st.caption(f"⚠️ {message}")
         for i, col_name in enumerate(DATE_FIELDS):
             with form_cols[i % 3]:
                 chosen_date = st.date_input(col_name, value=date_defaults.get(col_name))
                 record[col_name] = chosen_date.isoformat() if chosen_date else None
+                for message in form_errors.get(col_name, []):
+                    st.caption(f"⚠️ {message}")
 
         submitted = st.form_submit_button("🚀 Predict Termination Risk")
 
     if submitted:
         try:
+            validated_record = EmployeeRecord.model_validate(record).normalized_payload()
+            st.session_state["single_form_errors"] = {}
             logger.info("Running single-record prediction with horizons: %s", tenure_horizons)
             estimator = load_prediction_model(model_path_input)
-            risks_state = predict_tenure_risk(record, horizons=tenure_horizons, model=estimator)
+            risks_state = predict_tenure_risk(validated_record, horizons=tenure_horizons, model=estimator)
             st.success("Prediction complete!")
             # Display results in a table
             risk_df = pd.DataFrame([r.__dict__ for r in risks_state])
@@ -351,6 +375,10 @@ with single_tab:
             # Display the combined visualization
             fig = build_combined_figure(best_model_metrics, risks_state)
             st.plotly_chart(fig, use_container_width=True)
+        except ValidationError as err:
+            logger.warning("Validation failed for single record: %s", err)
+            st.session_state["single_form_errors"] = _map_validation_errors(err)
+            st.error("Please correct the highlighted fields before running prediction.")
         except Exception as e:
             logger.exception("Single-record prediction failed")
             st.error(f"Prediction failed: {e}")
@@ -392,9 +420,16 @@ with batch_tab:
                 # Process each row and collect predictions
                 for i, (_, row) in enumerate(records_df.iterrows()):
                     try:
-                        risks = predict_tenure_risk(row.to_dict(), horizons=tenure_horizons, model=estimator)
+                        normalized_row = EmployeeRecord.model_validate(row.to_dict()).normalized_payload()
+                        risks = predict_tenure_risk(normalized_row, horizons=tenure_horizons, model=estimator)
                         for r in risks:
                             batch_results.append({"record_index": i + 1, **r.__dict__})
+                    except ValidationError as err:
+                        logger.warning("Validation failed for row %d: %s", i + 1, err)
+                        messages = ", ".join(
+                            f"{issue.get('loc', ['record'])[0]}: {issue.get('msg')}" for issue in err.errors()
+                        )
+                        st.warning(f"Row {i + 1} failed validation and was skipped. Details: {messages}")
                     except Exception as e:
                         logger.warning("Prediction failed for row %d: %s", i + 1, e)
                         st.warning(f"Skipping prediction for row {i + 1} due to an error: {e}")

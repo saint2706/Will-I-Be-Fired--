@@ -23,9 +23,11 @@ from sklearn.pipeline import Pipeline
 try:
     from .feature_engineering import parse_dates, prepare_inference_frame
     from .logging_utils import get_logger
+    from .schemas import EmployeeRecord
 except ImportError:  # pragma: no cover - fallback for script execution
     from feature_engineering import parse_dates, prepare_inference_frame
     from logging_utils import get_logger
+    from schemas import EmployeeRecord
 
 # Define project structure and default paths
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -36,6 +38,28 @@ logger = get_logger(__name__)
 
 # Type alias for records that can be processed.
 Records = Union[pd.DataFrame, dict, pd.Series]
+
+
+def _validate_record(payload: dict[str, Any]) -> dict[str, Any]:
+    """Normalise a single payload using the EmployeeRecord schema."""
+
+    record = EmployeeRecord.model_validate(payload)
+    return record.normalized_payload()
+
+
+def _records_to_frame(records: Records) -> pd.DataFrame:
+    """Coerce raw payloads into a validated DataFrame."""
+
+    if isinstance(records, pd.DataFrame):
+        normalised = [_validate_record(row.to_dict()) for _, row in records.iterrows()]
+        return pd.DataFrame(normalised)
+    if isinstance(records, pd.Series):
+        normalised = _validate_record(records.to_dict())
+        return pd.DataFrame([normalised])
+    if isinstance(records, dict):
+        normalised = _validate_record(records)
+        return pd.DataFrame([normalised])
+    raise TypeError("records must be a dict, Series, or DataFrame")
 
 
 @dataclass
@@ -113,7 +137,9 @@ def prepare_features_for_inference(records: Records, *, reference_date: Optional
     A DataFrame ready for the model's `predict` or `predict_proba` methods.
     """
     logger.debug("Preparing features for inference")
-    features = prepare_inference_frame(records, reference_date=reference_date)
+    validated_frame = _records_to_frame(records)
+    parsed_frame = parse_dates(validated_frame)
+    features = prepare_inference_frame(parsed_frame, reference_date=reference_date)
     logger.debug("Prepared feature columns: %s", ", ".join(features.columns))
     return features
 
@@ -262,10 +288,7 @@ def predict_tenure_risk(
     A list of `TenureRisk` objects, one for each requested horizon.
     """
     # Standardize input and ensure 'DateofTermination' is not present.
-    raw_frame = record.iloc[[0]].copy() if isinstance(record, pd.DataFrame) else pd.DataFrame([record])
-    base_frame = parse_dates(raw_frame)
-    if "DateofTermination" in base_frame.columns:
-        base_frame["DateofTermination"] = pd.NaT
+    base_frame = parse_dates(_records_to_frame(record))
 
     risks: list[TenureRisk] = []
     estimator = _ensure_model(model, model_path)

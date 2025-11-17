@@ -2,6 +2,9 @@
 # Enable CORS for cross-origin requests (required for deployed apps)
 enableCORS = true
 
+# Run in headless mode so CI environments don't attempt to spawn a browser
+headless = true
+
 # Enable WebSocket compression for better performance
 enableWebsocketCompression = true
 

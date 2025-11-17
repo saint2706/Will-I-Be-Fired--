@@ -3,22 +3,44 @@ import json
 import sys
 from pathlib import Path
 
+import pytest
+
 sys.path.append(str(Path(__file__).resolve().parents[1] / "src"))
 import predict_cli  # noqa: E402
+
+BASE_PAYLOAD = {
+    "Department": "IT",
+    "PerformanceScore": "Fully Meets",
+    "RecruitmentSource": "Indeed",
+    "Position": "IT Support",
+    "State": "MA",
+    "Sex": "Male",
+    "MaritalDesc": "Single",
+    "CitizenDesc": "US Citizen",
+    "RaceDesc": "White",
+    "HispanicLatino": "No",
+    "Salary": "65000",
+    "EngagementSurvey": "4.0",
+    "EmpSatisfaction": "4",
+    "SpecialProjectsCount": "3",
+    "DaysLateLast30": "0",
+    "Absences": "5",
+    "DateofHire": "2018-07-01",
+    "DOB": "1990-05-18",
+    "LastPerformanceReview_Date": "2023-10-01",
+}
+
+
+def _payload(**overrides):
+    data = BASE_PAYLOAD.copy()
+    data.update(overrides)
+    return data
 
 
 def test_main_processes_multiple_records(tmp_path, monkeypatch, capsys):
     records = [
-        {
-            "Department": "IT",
-            "Salary": "60000",
-            "DateofHire": "2020-01-01",
-        },
-        {
-            "Department": "HR",
-            "Salary": "70000",
-            "DateofHire": "2019-06-15",
-        },
+        _payload(Department="IT", Salary="60000", DateofHire="2020-01-01"),
+        _payload(Department="HR", Salary="70000", DateofHire="2019-06-15"),
     ]
     employee_file = tmp_path / "employees.json"
     employee_file.write_text(json.dumps(records))
@@ -55,9 +77,36 @@ def test_main_processes_multiple_records(tmp_path, monkeypatch, capsys):
 
     assert len(seen_records) == 2
     assert seen_records[0]["Salary"] == 60000.0
+    assert seen_records[0]["DateofHire"] == "2020-01-01"
     assert seen_records[1]["Salary"] == 70000.0
+    assert seen_records[1]["Department"] == "HR"
 
     output = capsys.readouterr().out
     assert "=== Employee record 1 ===" in output
     assert "=== Employee record 2 ===" in output
     assert output.count("--- Predicted Termination Risk ---") == 2
+
+
+def test_main_exits_on_validation_error(tmp_path, monkeypatch, capsys):
+    records = [_payload(Salary="not-a-number")]
+    employee_file = tmp_path / "employees.json"
+    employee_file.write_text(json.dumps(records))
+
+    args = argparse.Namespace(
+        employee_json=employee_file,
+        model=Path("dummy.joblib"),
+        horizons=None,
+        calibrate=False,
+        policy_config=Path("dummy_policy.yaml"),
+    )
+
+    monkeypatch.setattr(predict_cli, "parse_args", lambda: args)
+    monkeypatch.setattr(predict_cli, "configure_logging", lambda: None)
+    monkeypatch.setattr(predict_cli, "set_global_seed", lambda x: None)
+
+    with pytest.raises(SystemExit) as exc:
+        predict_cli.main()
+
+    assert exc.value.code == 1
+    output = capsys.readouterr().out
+    assert "Input validation failed" in output

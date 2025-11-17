@@ -216,7 +216,9 @@ Test metrics with 95% CI: {
 
 ### Python API
 Use [`src/inference.py`](src/inference.py) to reload the persisted pipeline and generate predictions. The helpers accept raw
-employee records (dicts, Series, or DataFrames) and handle the necessary feature engineering before calling the estimator.
+employee records (dicts, Series, or DataFrames) and handle the necessary feature engineering before calling the estimator. Every
+entry point first validates data against [`EmployeeRecord`](src/schemas.py), so typos (e.g., "sixty" instead of `60000`) and
+impossible dates are caught before the model runs.
 
 ```python
 import sys
@@ -272,6 +274,9 @@ python src/predict_cli.py --model models/best_model.joblib --calibrate
 # From JSON file with custom horizons
 python src/predict_cli.py --employee-json sample_employee.json --horizons 1 3 5 --calibrate
 ```
+
+If any field violates the shared schema, the CLI prints a concise error report and exits with status code 1. The Streamlit GUI
+shows the same validation feedback inline next to the affected inputs.
 
 **With `--calibrate` flag:**
 - Shows **risk band** (Low, Low-Moderate, Moderate, High) for each prediction

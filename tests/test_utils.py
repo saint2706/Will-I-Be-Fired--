@@ -5,13 +5,12 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 
 import numpy as np
-import pytest
 
 sys.path.append(str(Path(__file__).resolve().parents[1] / "src"))
 
-from constants import RANDOM_SEED
-from utils.metrics import bootstrap_metric, compute_metrics_with_ci, format_metric_with_ci
-from utils.repro import set_global_seed
+from constants import RANDOM_SEED  # noqa: E402
+from utils.metrics import bootstrap_metric, compute_metrics_with_ci, format_metric_with_ci  # noqa: E402
+from utils.repro import set_global_seed  # noqa: E402
 
 
 def test_set_global_seed():

@@ -8,7 +8,7 @@ This module provides functions to generate diagnostic plots including:
 """
 
 from pathlib import Path
-from typing import Optional, Tuple
+from typing import Tuple
 
 import matplotlib.pyplot as plt
 import numpy as np
