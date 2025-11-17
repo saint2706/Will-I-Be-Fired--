@@ -1,4 +1,4 @@
-.PHONY: setup lint test train evaluate report app reproduce clean help
+.PHONY: setup lint test train fairness evaluate report app reproduce clean help
 
 # Default target
 .DEFAULT_GOAL := help
@@ -39,6 +39,10 @@ test:  ## Run unit tests with coverage
 
 train:  ## Train the model from scratch
 	$(PYTHON) $(SRC_DIR)/train_model.py
+	$(PYTHON) $(SRC_DIR)/fairness_analysis.py
+
+fairness:  ## Run fairness and bias analysis on the held-out test set
+	$(PYTHON) $(SRC_DIR)/fairness_analysis.py
 
 evaluate:  ## Evaluate the trained model and generate metrics
 	@echo "Metrics are generated during training. Check $(REPORTS_DIR)/metrics_with_ci.json"
