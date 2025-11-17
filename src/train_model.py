@@ -41,7 +41,7 @@ try:
         NUMERIC_FEATURES,
         prepare_training_data,
     )
-    from .utils.metrics import compute_metrics_with_ci, format_metric_with_ci
+    from .utils.metrics import compute_metrics_with_ci
     from .utils.plotting import (
         plot_calibration_curve,
         plot_feature_importance,
@@ -57,7 +57,7 @@ except ImportError:  # pragma: no cover - fallback for script execution
         NUMERIC_FEATURES,
         prepare_training_data,
     )
-    from utils.metrics import compute_metrics_with_ci, format_metric_with_ci
+    from utils.metrics import compute_metrics_with_ci
     from utils.plotting import (
         plot_calibration_curve,
         plot_feature_importance,
@@ -541,8 +541,6 @@ def compute_and_save_metrics_with_ci(
     y_prob = model.predict_proba(splits.X_test)[:, 1]
 
     # Compute metrics with CIs
-    import numpy as np
-
     metrics_ci = compute_metrics_with_ci(
         y_true=splits.y_test.values,
         y_pred=y_pred,
@@ -582,14 +580,12 @@ def generate_diagnostic_plots(model: ImbPipeline, splits: SplitData, output_dir:
     output_dir : Path
         Output directory for figures
     """
-    import numpy as np
     from sklearn.inspection import permutation_importance
 
     figures_dir = output_dir / "figures"
     figures_dir.mkdir(parents=True, exist_ok=True)
 
     # Generate predictions
-    y_pred = model.predict(splits.X_test)
     y_prob = model.predict_proba(splits.X_test)[:, 1]
 
     # ROC curve

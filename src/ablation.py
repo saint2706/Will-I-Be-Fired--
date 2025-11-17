@@ -8,13 +8,10 @@ This module implements ablation experiments to understand the contribution of:
 
 from __future__ import annotations
 
-import json
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, List, Optional, Sequence, Tuple
+from typing import Dict, List, Optional
 
-import joblib
-import numpy as np
 import pandas as pd
 from imblearn.pipeline import Pipeline as ImbPipeline
 from sklearn.compose import ColumnTransformer
@@ -421,7 +418,9 @@ def write_ablation_markdown(results: List[AblationResult], output_path: Path) ->
         f.write("### Impact of Class Rebalancing\n")
         no_rebal = next(r for r in results if r.experiment_name == "no_rebalancing")
         f.write(f"- Without rebalancing: ROC-AUC = {no_rebal.roc_auc:.3f}, Recall = {no_rebal.recall:.3f}\n")
-        f.write("- Class rebalancing significantly improves recall for the minority class (terminated employees)\n\n")
+        f.write(
+            "- Class rebalancing significantly improves recall for the minority class " "(terminated employees)\n\n"
+        )
 
         f.write("### Impact of Date-Derived Features\n")
         no_dates = next(r for r in results if r.experiment_name == "no_date_features")
@@ -436,7 +435,8 @@ def write_ablation_markdown(results: List[AblationResult], output_path: Path) ->
         f.write(f"- Top-10 features: ROC-AUC = {top_10.roc_auc:.3f}\n")
         f.write(f"- Top-20 features: ROC-AUC = {top_20.roc_auc:.3f}\n")
         f.write(
-            "- A small set of features captures most predictive power; adding more features yields diminishing returns\n"
+            "- A small set of features captures most predictive power; "
+            "adding more features yields diminishing returns\n"
         )
 
     logger.info(f"Wrote ablation markdown to {output_path}")

@@ -22,6 +22,7 @@ dependencies = [
     "streamlit==1.39.0",
     "numpy==2.3.4",
     "pyyaml==6.0.2",
+    "pydantic==2.9.2",
 ]
 
 [project.optional-dependencies]

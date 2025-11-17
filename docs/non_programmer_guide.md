@@ -16,6 +16,54 @@ want to understand the full pipeline and the meaning of every metric, continue t
 
 ---
 
+## What data do I need to provide?
+
+All inference tools (Python API, CLI, and Streamlit dashboard) share the exact same input schema defined in `src/schemas.py`.
+That schema describes what HR partners must supply before any prediction runs.
+
+### Categorical descriptors
+
+Provide the latest value for each text field. Leave no blanks—if something truly does not apply, enter `Unknown` so the
+validation layer can route it consistently.
+
+- Department
+- PerformanceScore (e.g., "Fully Meets", "Needs Improvement")
+- RecruitmentSource ("Indeed", "LinkedIn", internal referral, etc.)
+- Position (job title)
+- State (two-letter postal code)
+- Sex
+- MaritalDesc ("Single", "Married", ...)
+- CitizenDesc (citizenship/visa status)
+- RaceDesc
+- HispanicLatino ("Yes" or "No")
+
+### Numeric and survey inputs
+
+| Field | What to enter | Constraints | Default if omitted |
+| --- | --- | --- | --- |
+| Salary | Annual compensation in USD | 0 – 1,000,000 | 65,000 |
+| EngagementSurvey | Engagement score (0–5) rounded to 2 decimals | 0 – 5 | 4.0 |
+| EmpSatisfaction | Whole-number satisfaction rating | 1 – 5 | 4 |
+| SpecialProjectsCount | Count of active special projects | 0 – 50 | 3 |
+| DaysLateLast30 | Total late days during the last 30-day window | 0 – 30 | 0 |
+| Absences | Calendar days of absence over the past year | 0 – 365 | 5 |
+
+The defaults are identical to the CLI prompts; they help with exploratory runs but you should replace them with real data.
+
+### Critical dates
+
+- **DateofHire** – First day the employee was paid. Must fall between 1900-01-01 and 2100-12-31.
+- **DOB** – Date of birth. Must also be within the allowed range *and* occur before the hire date.
+- **LastPerformanceReview_Date** – When the most recent formal review concluded. Must be on/after the hire date.
+
+Dates can be typed as `YYYY-MM-DD` strings or selected from the GUI calendar. The validation layer normalizes every valid input
+to ISO 8601 format so downstream code can safely parse it.
+
+If any field is missing, mistyped (for example, "sixty" instead of `60_000`), or contains an impossible date, the interface will
+show an actionable error message and refuse to run inference until the record conforms to this schema.
+
+---
+
 ## 2. How the data becomes predictions
 
 The workflow follows nine repeatable stages. You can re-run them with the scripts in the `src/` folder or by using the `make reproduce` command (see "Option A: One-Command Reproducible Pipeline" in Section 5).

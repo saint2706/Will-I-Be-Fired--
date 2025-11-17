@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Sequence, Tuple
 
@@ -28,10 +29,12 @@ import yaml
 try:
     from .constants import RANDOM_SEED
     from .inference import DEFAULT_MODEL_PATH, TenureRisk, predict_tenure_risk
+    from .schemas import EmployeeRecord, ValidationError
     from .utils.repro import set_global_seed
 except ImportError:  # pragma: no cover - fallback for script execution
     from constants import RANDOM_SEED
     from inference import DEFAULT_MODEL_PATH, TenureRisk, predict_tenure_risk
+    from schemas import EmployeeRecord, ValidationError
     from utils.repro import set_global_seed
 
 try:
@@ -151,51 +154,6 @@ def _load_employee_json(path: Path) -> List[Dict[str, Any]]:
     return [data]
 
 
-def _parse_numeric(value: str) -> float:
-    """Safely convert a string to a float, returning NaN on failure."""
-    try:
-        return float(value)
-    except (TypeError, ValueError):
-        return float("nan")
-
-
-def _normalise_inputs(payload: Dict[str, str]) -> Dict[str, Any]:
-    """Convert raw string inputs into types suitable for the model.
-
-    - Numeric fields are converted to floats.
-    - Date fields are passed as strings (or None if empty).
-    - Other fields are passed through as-is.
-
-    Parameters
-    ----------
-    payload:
-        A dictionary of raw string inputs from the user or JSON file.
-
-    Returns
-    -------
-    A dictionary with values converted to appropriate types.
-    """
-    numeric_fields = {
-        "Salary",
-        "EngagementSurvey",
-        "EmpSatisfaction",
-        "SpecialProjectsCount",
-        "DaysLateLast30",
-        "Absences",
-    }
-    date_fields = {"DateofHire", "DOB", "LastPerformanceReview_Date"}
-    normalised: Dict[str, Any] = {}
-    for key, value in payload.items():
-        if key in numeric_fields:
-            normalised[key] = _parse_numeric(value)
-        elif key in date_fields:
-            # Pass empty strings as None so they are treated as missing dates.
-            normalised[key] = value or None
-        else:
-            normalised[key] = value
-    return normalised
-
-
 def _build_records(args: argparse.Namespace) -> List[Dict[str, Any]]:
     """Construct one or more employee records from JSON or user prompts.
 
@@ -212,7 +170,12 @@ def _build_records(args: argparse.Namespace) -> List[Dict[str, Any]]:
         payloads = _load_employee_json(args.employee_json)
     else:
         payloads = [_prompt_user(DEFAULT_PROMPTS)]
-    return [_normalise_inputs(payload) for payload in payloads]
+
+    validated_records: List[Dict[str, Any]] = []
+    for payload in payloads:
+        record = EmployeeRecord.model_validate(payload)
+        validated_records.append(record.normalized_payload())
+    return validated_records
 
 
 def _format_probability(probability: float) -> str:
@@ -328,6 +291,13 @@ def display_results(
             print("No specific actions configured for this risk band.")
 
 
+def _display_validation_errors(error: ValidationError) -> None:
+    print("\nInput validation failed:")
+    for issue in error.errors():
+        loc = " -> ".join(str(part) for part in issue.get("loc", [])) or "record"
+        print(f" - {loc}: {issue.get('msg')}")
+
+
 def main() -> None:
     """Main entry point for the CLI application."""
     configure_logging()
@@ -350,9 +320,13 @@ def main() -> None:
             print(f"\n=== Employee record {index} ===")
             risks = predict_tenure_risk(record, horizons=horizons, model_path=args.model)
             display_results(risks, show_actions=args.calibrate, policy_config=policy_config)
+    except ValidationError as err:
+        _display_validation_errors(err)
+        sys.exit(1)
     except Exception as e:
         logger.exception("An error occurred during prediction.")
         print(f"\nError: {e}")
+        sys.exit(1)
 
 
 if __name__ == "__main__":
