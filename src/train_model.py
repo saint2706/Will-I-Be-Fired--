@@ -22,6 +22,7 @@ from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 
 import joblib
 import pandas as pd
+import yaml
 from imblearn.over_sampling import RandomOverSampler
 from imblearn.pipeline import Pipeline as ImbPipeline
 from sklearn.compose import ColumnTransformer
@@ -32,7 +33,6 @@ from sklearn.metrics import accuracy_score, precision_score, recall_score, roc_a
 from sklearn.model_selection import GridSearchCV, StratifiedKFold, train_test_split
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import OneHotEncoder, StandardScaler
-import yaml
 
 try:
     from .analysis.failures import analyze_failures_from_test
@@ -503,7 +503,11 @@ def train_models(
 
     preprocessor = build_preprocessor(numeric_features=numeric_features, categorical_features=categorical_features)
     pipelines = build_model_pipelines(preprocessor, model_configs=model_configs, random_state=random_state)
-    cv = StratifiedKFold(n_splits=cv_settings.n_splits, shuffle=cv_settings.shuffle, random_state=cv_settings.random_state)
+    cv = StratifiedKFold(
+        n_splits=cv_settings.n_splits,
+        shuffle=cv_settings.shuffle,
+        random_state=cv_settings.random_state,
+    )
     results: List[ModelResult] = []
 
     for name, (pipeline, grid) in pipelines.items():
