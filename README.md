@@ -83,7 +83,11 @@ Feature preparation is centralized in [`src/feature_engineering.py`](src/feature
 
 ### Quick Training
 ```bash
+# Legacy CLI options
 python src/train_model.py
+
+# Configuration-driven experiments
+python src/train_model.py --config configs/experiments/default.yaml
 ```
 
 The script:
@@ -115,6 +119,8 @@ Test metrics are reported with **95% confidence intervals** using 1000 bootstrap
 | ROC-AUC | 1.000 | 0.995 | 1.000 |
 
 **Calibration:** Brier score and reliability curve assess probability calibration (see `reports/figures/calibration.png`).
+
+See [`configs/README.md`](configs/README.md) for details on creating new YAML experiments (feature overrides, CV settings, and hyperparameter grids).
 
 ---
 
