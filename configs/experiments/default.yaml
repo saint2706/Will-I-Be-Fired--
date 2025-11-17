@@ -1,0 +1,49 @@
+# Default experiment configuration mirroring the legacy training behaviour.
+data:
+  dataset_path: ../../HRDataset_v14.csv
+
+preprocessing:
+  include_numeric_features:
+    - Salary
+    - EngagementSurvey
+    - EmpSatisfaction
+    - SpecialProjectsCount
+    - DaysLateLast30
+    - Absences
+    - tenure_years
+    - age_years
+    - years_since_last_review
+  include_categorical_features:
+    - Department
+    - PerformanceScore
+    - RecruitmentSource
+    - Position
+    - State
+    - Sex
+    - MaritalDesc
+    - CitizenDesc
+    - RaceDesc
+    - HispanicLatino
+
+models:
+  logistic_regression:
+    type: logistic_regression
+    hyperparameters:
+      model__C: [0.1, 1.0, 10.0]
+  random_forest:
+    type: random_forest
+    hyperparameters:
+      model__n_estimators: [200, 400]
+      model__max_depth: [null, 10, 16]
+      model__min_samples_split: [2, 5]
+  gradient_boosting:
+    type: gradient_boosting
+    hyperparameters:
+      model__n_estimators: [150, 250]
+      model__learning_rate: [0.05, 0.1]
+      model__max_depth: [2, 3]
+
+cross_validation:
+  n_splits: 5
+  shuffle: true
+  random_state: 42

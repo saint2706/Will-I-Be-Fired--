@@ -1,0 +1,28 @@
+# Lightweight configuration for quick experiments or CI smoke tests.
+data:
+  dataset_path: ../../HRDataset_v14.csv
+
+preprocessing:
+  include_numeric_features:
+    - Salary
+    - tenure_years
+    - years_since_last_review
+  include_categorical_features:
+    - Department
+    - PerformanceScore
+
+models:
+  logistic_quick:
+    type: logistic_regression
+    hyperparameters:
+      model__C: [1.0]
+  random_forest_quick:
+    type: random_forest
+    hyperparameters:
+      model__n_estimators: [100]
+      model__max_depth: [8]
+
+cross_validation:
+  n_splits: 3
+  shuffle: true
+  random_state: 42

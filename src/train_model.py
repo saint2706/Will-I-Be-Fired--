@@ -16,9 +16,9 @@ from __future__ import annotations
 
 import argparse
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 
 import joblib
 import pandas as pd
@@ -32,6 +32,7 @@ from sklearn.metrics import accuracy_score, precision_score, recall_score, roc_a
 from sklearn.model_selection import GridSearchCV, StratifiedKFold, train_test_split
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import OneHotEncoder, StandardScaler
+import yaml
 
 try:
     from .analysis.failures import analyze_failures_from_test
@@ -80,6 +81,98 @@ REPORTS_DIR = PROJECT_ROOT / "reports"
 FIGURES_DIR = REPORTS_DIR / "figures"
 
 logger = get_logger(__name__)
+
+
+def _resolve_path(base_path: Path, path_str: str) -> Path:
+    path = Path(path_str)
+    if path.is_absolute():
+        return path
+    return (base_path / path).resolve()
+
+
+def load_experiment_config(config_path: Path) -> ExperimentConfig:
+    """Load an experiment configuration from a YAML file."""
+
+    config_data = yaml.safe_load(config_path.read_text()) or {}
+
+    data_section = config_data.get("data", {})
+    dataset_path_str = data_section.get("dataset_path", str(DATA_PATH))
+    dataset_path = _resolve_path(config_path.parent, dataset_path_str)
+
+    preprocessing_section = config_data.get("preprocessing", {})
+    preprocessing = PreprocessingConfig(
+        include_numeric_features=preprocessing_section.get("include_numeric_features"),
+        exclude_numeric_features=preprocessing_section.get("exclude_numeric_features"),
+        include_categorical_features=preprocessing_section.get("include_categorical_features"),
+        exclude_categorical_features=preprocessing_section.get("exclude_categorical_features"),
+    )
+
+    models_section = config_data.get("models") or {}
+    if not models_section:
+        raise ValueError("Experiment config must define at least one model under `models`.")
+
+    model_configs = {}
+    for name, payload in models_section.items():
+        payload = payload or {}
+        model_configs[name] = ModelConfig(
+            name=name,
+            type=payload.get("type", name),
+            hyperparameters=payload.get("hyperparameters", {}),
+            model_parameters=payload.get("model_parameters", {}),
+        )
+
+    cv_section = config_data.get("cross_validation", {})
+    cross_validation = CrossValidationConfig(
+        n_splits=cv_section.get("n_splits", 5),
+        shuffle=cv_section.get("shuffle", True),
+        random_state=cv_section.get("random_state"),
+    )
+
+    return ExperimentConfig(
+        dataset_path=dataset_path,
+        preprocessing=preprocessing,
+        models=model_configs,
+        cross_validation=cross_validation,
+    )
+
+
+def _apply_feature_overrides(
+    base_features: Sequence[str], include: Optional[Iterable[str]], exclude: Optional[Iterable[str]]
+) -> List[str]:
+    if include:
+        filtered = [feature for feature in include if feature in base_features]
+    else:
+        filtered = list(base_features)
+
+    if exclude:
+        exclude_set = set(exclude)
+        filtered = [feature for feature in filtered if feature not in exclude_set]
+
+    return filtered
+
+
+def resolve_feature_lists(preprocessing_config: Optional[PreprocessingConfig]) -> Tuple[List[str], List[str]]:
+    """Resolve numeric and categorical feature lists based on config overrides."""
+
+    if preprocessing_config is None:
+        numeric = list(NUMERIC_FEATURES)
+        categorical = list(CATEGORICAL_FEATURES)
+    else:
+        numeric = _apply_feature_overrides(
+            NUMERIC_FEATURES,
+            preprocessing_config.include_numeric_features,
+            preprocessing_config.exclude_numeric_features,
+        )
+        categorical = _apply_feature_overrides(
+            CATEGORICAL_FEATURES,
+            preprocessing_config.include_categorical_features,
+            preprocessing_config.exclude_categorical_features,
+        )
+
+    if not numeric and not categorical:
+        raise ValueError("Preprocessing configuration removed all features.")
+
+    return numeric, categorical
 
 
 @dataclass
@@ -135,7 +228,79 @@ class ModelResult:
     test_metrics: Dict[str, float]
 
 
-def build_preprocessor() -> ColumnTransformer:
+@dataclass(frozen=True)
+class ModelConfig:
+    """Configuration for a single estimator family."""
+
+    name: str
+    type: str
+    hyperparameters: Dict[str, Any] = field(default_factory=dict)
+    model_parameters: Dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class PreprocessingConfig:
+    """Configuration for feature selection during preprocessing."""
+
+    include_numeric_features: Optional[List[str]] = None
+    exclude_numeric_features: Optional[List[str]] = None
+    include_categorical_features: Optional[List[str]] = None
+    exclude_categorical_features: Optional[List[str]] = None
+
+
+@dataclass(frozen=True)
+class CrossValidationConfig:
+    """Configuration parameters for cross-validation."""
+
+    n_splits: int = 5
+    shuffle: bool = True
+    random_state: Optional[int] = None
+
+
+@dataclass(frozen=True)
+class ExperimentConfig:
+    """Represents the structure of a YAML-driven experiment."""
+
+    dataset_path: Path
+    preprocessing: PreprocessingConfig
+    models: Dict[str, ModelConfig]
+    cross_validation: CrossValidationConfig
+
+
+DEFAULT_MODEL_CONFIGS: Dict[str, ModelConfig] = {
+    "logistic_regression": ModelConfig(
+        name="logistic_regression",
+        type="logistic_regression",
+        hyperparameters={"model__C": [0.1, 1.0, 10.0]},
+        model_parameters={"max_iter": 1000, "solver": "lbfgs"},
+    ),
+    "random_forest": ModelConfig(
+        name="random_forest",
+        type="random_forest",
+        hyperparameters={
+            "model__n_estimators": [200, 400],
+            "model__max_depth": [None, 10, 16],
+            "model__min_samples_split": [2, 5],
+        },
+        model_parameters={"n_jobs": -1},
+    ),
+    "gradient_boosting": ModelConfig(
+        name="gradient_boosting",
+        type="gradient_boosting",
+        hyperparameters={
+            "model__n_estimators": [150, 250],
+            "model__learning_rate": [0.05, 0.1],
+            "model__max_depth": [2, 3],
+        },
+    ),
+}
+
+DEFAULT_CROSS_VALIDATION_CONFIG = CrossValidationConfig(n_splits=5, shuffle=True, random_state=RANDOM_SEED)
+
+
+def build_preprocessor(
+    numeric_features: Optional[Sequence[str]] = None, categorical_features: Optional[Sequence[str]] = None
+) -> ColumnTransformer:
     """Create the preprocessing pipeline for numeric and categorical features.
 
     This function defines the transformations to be applied to the raw data:
@@ -148,7 +313,14 @@ def build_preprocessor() -> ColumnTransformer:
     A scikit-learn `ColumnTransformer` object ready to be included in a model
     pipeline.
     """
-    logger.debug("Building preprocessing pipelines for numeric and categorical features")
+    numeric = list(numeric_features) if numeric_features is not None else list(NUMERIC_FEATURES)
+    categorical = list(categorical_features) if categorical_features is not None else list(CATEGORICAL_FEATURES)
+
+    logger.debug(
+        "Building preprocessing pipelines for numeric (%s) and categorical (%s) features",
+        numeric,
+        categorical,
+    )
     numeric_transformer = Pipeline(
         steps=[
             ("imputer", SimpleImputer(strategy="median")),
@@ -163,14 +335,16 @@ def build_preprocessor() -> ColumnTransformer:
         ]
     )
 
-    # Combine transformers into a single preprocessor object
-    return ColumnTransformer(
-        transformers=[
-            ("numeric", numeric_transformer, list(NUMERIC_FEATURES)),
-            ("categorical", categorical_transformer, list(CATEGORICAL_FEATURES)),
-        ],
-        remainder="drop",  # Drop any columns not explicitly transformed
-    )
+    transformers = []
+    if numeric:
+        transformers.append(("numeric", numeric_transformer, numeric))
+    if categorical:
+        transformers.append(("categorical", categorical_transformer, categorical))
+
+    if not transformers:
+        raise ValueError("At least one feature must be provided to the preprocessor.")
+
+    return ColumnTransformer(transformers=transformers, remainder="drop")
 
 
 def prepare_features(df: pd.DataFrame) -> Tuple[pd.DataFrame, pd.Series]:
@@ -224,69 +398,49 @@ def stratified_splits(X: pd.DataFrame, y: pd.Series, random_state: int = 42) -> 
     return SplitData(X_train, X_val, X_test, y_train, y_val, y_test)
 
 
+def _create_estimator(model_type: str, random_state: int, overrides: Dict[str, Any]) -> Any:
+    """Instantiate an estimator for the requested model family."""
+
+    overrides = overrides or {}
+
+    if model_type == "logistic_regression":
+        params = {"max_iter": 1000, "solver": "lbfgs", "random_state": random_state}
+        params.update(overrides)
+        return LogisticRegression(**params)
+    if model_type == "random_forest":
+        params = {"random_state": random_state, "n_jobs": -1}
+        params.update(overrides)
+        return RandomForestClassifier(**params)
+    if model_type == "gradient_boosting":
+        params = {"random_state": random_state}
+        params.update(overrides)
+        return GradientBoostingClassifier(**params)
+
+    raise ValueError(f"Unsupported model family: {model_type}")
+
+
 def build_model_pipelines(
     preprocessor: ColumnTransformer,
+    *,
+    model_configs: Optional[Dict[str, ModelConfig]] = None,
+    random_state: int = RANDOM_SEED,
 ) -> Dict[str, Tuple[ImbPipeline, Dict[str, Any]]]:
-    """Define candidate models and their hyperparameter grids.
+    """Define candidate models and their hyperparameter grids."""
 
-    This function returns a dictionary where each key is a model name and the
-    value is a tuple containing:
-    1. An `imblearn` pipeline that combines preprocessing, over-sampling (to
-       handle class imbalance), and the estimator.
-    2. A dictionary defining the hyperparameter grid for `GridSearchCV`.
+    configs = model_configs or DEFAULT_MODEL_CONFIGS
+    pipelines: Dict[str, Tuple[ImbPipeline, Dict[str, Any]]] = {}
+    for name, config in configs.items():
+        estimator = _create_estimator(config.type, random_state, config.model_parameters)
+        pipeline = ImbPipeline(
+            steps=[
+                ("preprocess", preprocessor),
+                ("sampler", RandomOverSampler(random_state=random_state)),
+                ("model", estimator),
+            ]
+        )
+        pipelines[name] = (pipeline, dict(config.hyperparameters))
 
-    Parameters
-    ----------
-    preprocessor:
-        The `ColumnTransformer` to be included in each pipeline.
-
-    Returns
-    -------
-    A dictionary of model names to (pipeline, grid) tuples.
-    """
-    # Pipeline for Logistic Regression
-    logistic = ImbPipeline(
-        steps=[
-            ("preprocess", preprocessor),
-            ("sampler", RandomOverSampler(random_state=RANDOM_SEED)),
-            ("model", LogisticRegression(max_iter=1000, solver="lbfgs", random_state=RANDOM_SEED)),
-        ]
-    )
-    logistic_grid = {"model__C": [0.1, 1.0, 10.0]}
-
-    # Pipeline for Random Forest
-    forest = ImbPipeline(
-        steps=[
-            ("preprocess", preprocessor),
-            ("sampler", RandomOverSampler(random_state=RANDOM_SEED)),
-            ("model", RandomForestClassifier(random_state=RANDOM_SEED, n_jobs=-1)),
-        ]
-    )
-    forest_grid = {
-        "model__n_estimators": [200, 400],
-        "model__max_depth": [None, 10, 16],
-        "model__min_samples_split": [2, 5],
-    }
-
-    # Pipeline for Gradient Boosting
-    gradient_boost = ImbPipeline(
-        steps=[
-            ("preprocess", preprocessor),
-            ("sampler", RandomOverSampler(random_state=RANDOM_SEED)),
-            ("model", GradientBoostingClassifier(random_state=RANDOM_SEED)),
-        ]
-    )
-    gradient_grid = {
-        "model__n_estimators": [150, 250],
-        "model__learning_rate": [0.05, 0.1],
-        "model__max_depth": [2, 3],
-    }
-
-    return {
-        "logistic_regression": (logistic, logistic_grid),
-        "random_forest": (forest, forest_grid),
-        "gradient_boosting": (gradient_boost, gradient_grid),
-    }
+    return pipelines
 
 
 def evaluate_model(model: ImbPipeline, X: pd.DataFrame, y: pd.Series) -> Dict[str, float]:
@@ -319,7 +473,15 @@ def evaluate_model(model: ImbPipeline, X: pd.DataFrame, y: pd.Series) -> Dict[st
     }
 
 
-def train_models(splits: SplitData, random_state: int = 42) -> List[ModelResult]:
+def train_models(
+    splits: SplitData,
+    random_state: int = 42,
+    *,
+    numeric_features: Optional[Sequence[str]] = None,
+    categorical_features: Optional[Sequence[str]] = None,
+    model_configs: Optional[Dict[str, ModelConfig]] = None,
+    cv_config: Optional[CrossValidationConfig] = None,
+) -> List[ModelResult]:
     """Train and evaluate all candidate models defined in the script.
 
     This function iterates through the models from `build_model_pipelines`,
@@ -337,9 +499,11 @@ def train_models(splits: SplitData, random_state: int = 42) -> List[ModelResult]
     -------
     A list of `ModelResult` objects, one for each trained model.
     """
-    preprocessor = build_preprocessor()
-    pipelines = build_model_pipelines(preprocessor)
-    cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=random_state)
+    cv_settings = cv_config or DEFAULT_CROSS_VALIDATION_CONFIG
+
+    preprocessor = build_preprocessor(numeric_features=numeric_features, categorical_features=categorical_features)
+    pipelines = build_model_pipelines(preprocessor, model_configs=model_configs, random_state=random_state)
+    cv = StratifiedKFold(n_splits=cv_settings.n_splits, shuffle=cv_settings.shuffle, random_state=cv_settings.random_state)
     results: List[ModelResult] = []
 
     for name, (pipeline, grid) in pipelines.items():
@@ -568,6 +732,24 @@ def compute_and_save_metrics_with_ci(
     return metrics_ci
 
 
+def _get_feature_names_from_preprocessor(preprocessor: ColumnTransformer) -> List[str]:
+    """Extract transformed feature names from a fitted preprocessor."""
+
+    feature_names: List[str] = []
+    for name, transformer, columns in preprocessor.transformers_:
+        if name == "numeric":
+            feature_names.extend(list(columns))
+        elif name == "categorical":
+            columns_list = list(columns)
+            if not columns_list:
+                continue
+            ohe = transformer.named_steps.get("onehot") if hasattr(transformer, "named_steps") else None
+            if ohe is None:
+                continue
+            feature_names.extend(ohe.get_feature_names_out(columns_list))
+    return feature_names
+
+
 def generate_diagnostic_plots(model: ImbPipeline, splits: SplitData, output_dir: Path) -> None:
     """Generate all diagnostic plots.
 
@@ -602,15 +784,11 @@ def generate_diagnostic_plots(model: ImbPipeline, splits: SplitData, output_dir:
 
     # Permutation importance
     logger.info("Computing permutation importance...")
-    X_test_transformed = model.named_steps["preprocess"].transform(splits.X_test)
+    preprocessor = model.named_steps["preprocess"]
+    X_test_transformed = preprocessor.transform(splits.X_test)
 
-    # Get feature names
-    feature_names_out = list(NUMERIC_FEATURES) + list(
-        model.named_steps["preprocess"]
-        .named_transformers_["categorical"]
-        .named_steps["onehot"]
-        .get_feature_names_out(CATEGORICAL_FEATURES)
-    )
+    # Get feature names based on the fitted preprocessor
+    feature_names_out = _get_feature_names_from_preprocessor(preprocessor)
 
     perm_importance = permutation_importance(
         model.named_steps["model"], X_test_transformed, splits.y_test, n_repeats=10, random_state=RANDOM_SEED, n_jobs=-1
@@ -631,6 +809,7 @@ def run_training(
     model_path: Path = DEFAULT_MODEL_PATH,
     metrics_path: Path = DEFAULT_METRICS_PATH,
     random_state: int = RANDOM_SEED,
+    experiment_config: Optional[ExperimentConfig] = None,
 ) -> ModelResult:
     """Execute the full training workflow and return the best model result.
 
@@ -656,8 +835,14 @@ def run_training(
     set_global_seed(random_state)
     logger.info(f"Set global random seed to {random_state}")
 
-    df = pd.read_csv(data_path)
-    logger.info("Loaded dataset with %d rows from %s", len(df), data_path)
+    dataset_path = experiment_config.dataset_path if experiment_config else data_path
+    preprocessing_config = experiment_config.preprocessing if experiment_config else None
+    numeric_features, categorical_features = resolve_feature_lists(preprocessing_config)
+    model_configs = experiment_config.models if experiment_config else DEFAULT_MODEL_CONFIGS
+    cv_config = experiment_config.cross_validation if experiment_config else DEFAULT_CROSS_VALIDATION_CONFIG
+
+    df = pd.read_csv(dataset_path)
+    logger.info("Loaded dataset with %d rows from %s", len(df), dataset_path)
 
     X, y = prepare_features(df)
     splits = stratified_splits(X, y, random_state=random_state)
@@ -670,7 +855,14 @@ def run_training(
     baselines = evaluate_baselines(splits)
 
     # Train models
-    results = train_models(splits, random_state=random_state)
+    results = train_models(
+        splits,
+        random_state=random_state,
+        numeric_features=numeric_features,
+        categorical_features=categorical_features,
+        model_configs=model_configs,
+        cv_config=cv_config,
+    )
     best_model = select_best_model(results)
 
     # Save the best model pipeline and the full metrics report
@@ -711,6 +903,7 @@ def parse_args() -> argparse.Namespace:
         "--metrics-output", type=Path, default=DEFAULT_METRICS_PATH, help="Destination for the metrics report (JSON)"
     )
     parser.add_argument("--random-state", type=int, default=RANDOM_SEED, help="Random seed for reproducibility")
+    parser.add_argument("--config", type=Path, help="Path to an experiment YAML configuration file")
     return parser.parse_args()
 
 
@@ -722,11 +915,13 @@ def main() -> None:
     """
     configure_logging()
     args = parse_args()
+    experiment_config = load_experiment_config(args.config) if args.config else None
     best_model = run_training(
         data_path=args.data,
         model_path=args.model_output,
         metrics_path=args.metrics_output,
         random_state=args.random_state,
+        experiment_config=experiment_config,
     )
 
     # Print a summary of the final results
