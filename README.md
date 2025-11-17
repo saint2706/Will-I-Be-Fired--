@@ -358,6 +358,22 @@ Our models significantly outperform trivial baselines.
 - **Calibration Curve:** `reports/figures/calibration.png` (Brier score: ~0.00)
 - **Feature Importance:** `reports/figures/perm_importance.png` (top 20 permutation importances)
 
+## Fairness & Responsible Use
+
+- Run `make fairness` (or the standalone `python src/fairness_analysis.py`) to
+  compute group-wise accuracy/recall/ROC-AUC, demographic parity difference,
+  and equal-opportunity difference for `RaceDesc`, `Sex`, `MaritalDesc`, and
+  `CitizenDesc`. Outputs land in `reports/fairness_summary.csv` plus bar charts
+  under `reports/figures/fairness_*.png`.
+- The current audit (47 test employees) shows the largest demographic parity
+  gap for **MaritalDesc** (0.57 between divorced and separated employees) and a
+  0.39 gap across race groups; several categories have only 1–2 examples so the
+  numbers carry high uncertainty.
+- Detailed findings, limitations, and a deployment warning live in
+  [`docs/FAIRNESS_AND_LIMITATIONS.md`](docs/FAIRNESS_AND_LIMITATIONS.md). The
+  model must only be used to flag retention risks for human review—**never** to
+  automate firing decisions.
+
 ## Ethical considerations
 - **Bias and fairness:** HR data may encode historical biases in hiring, promotion, or termination decisions. Monitor subgroup
   performance (e.g., by gender, race) to detect disparate impact.
@@ -392,6 +408,7 @@ Our models significantly outperform trivial baselines.
 ├── docs/
 │   ├── DATA_CARD.md                   # Dataset provenance, schema, leakage analysis
 │   ├── BUSINESS_ACTIONS.md            # Risk-based intervention framework
+│   ├── FAIRNESS_AND_LIMITATIONS.md    # Bias analysis summary + responsible use warning
 │   └── non_programmer_guide.md        # Beginner-friendly tutorial
 │
 ├── models/
